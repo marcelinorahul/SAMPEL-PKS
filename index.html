@@ -194,7 +194,7 @@
     </div>
     <div class="top-tabs" role="tablist">
       <button class="top-tab active" id="tabBtnPadatan" onclick="switchMenu('padatan')">Padatan</button>
-      <button class="top-tab" id="tabBtnCairan" onclick="switchMenu('cairan')">Cairan<span class="soon">sulfit &amp; OER</span></button>
+      <button class="top-tab" id="tabBtnCairan" onclick="switchMenu('cairan')">Cairan<span class="soon">sulfit &amp; FFA</span></button>
     </div>
   </div>
 </header>
@@ -321,23 +321,31 @@
 
     <div class="panel">
       <div class="panel-head">
-        <h2>OER — Oil Extraction Rate</h2>
-        <span class="hint">Rumus standar: Produksi CPO ÷ Total TBS diolah × 100 — sesuaikan bila lab Anda memakai definisi lain</span>
+        <h2>FFA — Free Fatty Acid</h2>
+        <span class="hint">Rumus: Volume titrasi NaOH × 25.6 × Normalitas NaOH ÷ Berat sampel</span>
       </div>
       <div class="calc-grid">
         <div class="field-row">
           <div class="field">
-            <label>Produksi CPO (ton)</label>
-            <input type="number" step="any" id="oerCpo" oninput="calcOER()">
+            <label>Volume titrasi NaOH (mL)</label>
+            <input type="number" step="any" id="ffaTitrasi" oninput="calcFFA()" placeholder="cth. 4.9">
           </div>
           <div class="field">
-            <label>Total TBS diolah (ton)</label>
-            <input type="number" step="any" id="oerTbs" oninput="calcOER()">
+            <label>Konstanta <span class="unit">tetap</span></label>
+            <input type="number" step="any" id="ffaKonstanta" value="25.6" oninput="calcFFA()">
+          </div>
+          <div class="field">
+            <label>Normalitas NaOH <span class="unit">bisa berubah tiap larutan</span></label>
+            <input type="number" step="any" id="ffaNormalitas" value="0.1035" oninput="calcFFA()">
+          </div>
+          <div class="field">
+            <label>Berat Sampel (g) <span class="unit">biasanya 3–4 gram</span></label>
+            <input type="number" step="any" id="ffaSampel" oninput="calcFFA()" placeholder="cth. 3.434">
           </div>
         </div>
         <div class="result-card">
-          <div class="result-row"><span class="k">OER</span><span class="v" id="oerHasil">—</span></div>
-          <div class="target-note">Beri tahu saya rumus OER yang dipakai di lab Anda bila berbeda dari standar ini, supaya bisa disesuaikan.</div>
+          <div class="result-row"><span class="k">%FFA</span><span class="v" id="ffaHasil">—</span></div>
+          <div class="target-note" id="ffaBreakdown">Isi volume titrasi dan berat sampel untuk melihat hasil.</div>
         </div>
       </div>
     </div>
@@ -546,10 +554,15 @@ const POINTS = {
   kernelSilo: {
     label: 'Kernel Silo',
     isSilo: true
+  },
+
+  pressCake: {
+    label: 'Press Cake',
+    isPressCake: true
   }
 };
 
-const POINT_ORDER = ['ripple','intiBasah','claybath','ltds1','ltds2','fcyclone','kernelSilo'];
+const POINT_ORDER = ['ripple','intiBasah','claybath','ltds1','ltds2','fcyclone','kernelSilo','pressCake'];
 
 /* ===================================================================
    RENDER: point tabs + body
@@ -574,6 +587,7 @@ function renderPointBody(){
   const body = document.getElementById('pointBody');
 
   if(def.isSilo){ renderSiloBody(body); return; }
+  if(def.isPressCake){ renderPressCakeBody(body); return; }
 
   const inputsHtml = def.inputs.map(f => `
     <div class="field">
@@ -692,32 +706,46 @@ function removeSiloCard(id){
   siloDrafts = siloDrafts.filter(s => s.id !== id);
   renderSiloList();
 }
-function updateSiloDraft(id, field, val){
+// Text/status field changes are infrequent — safe to re-render the whole card.
+function onSiloTextChange(id, field, val){
   const s = siloDrafts.find(s => s.id === id);
   if(!s) return;
-  s[field] = (field==='no' || field==='status') ? val : n(val);
-  renderSiloList(true);
+  s[field] = val;
+  renderSiloList();
 }
-function renderSiloList(skipInputRebuild){
+// Numeric fields fire on every keystroke — never rebuild the input itself,
+// only refresh this card's calculated result panel, otherwise the field
+// loses its value/cursor after each character (this was the reported bug).
+function onSiloNumberInput(id, field, val){
+  const s = siloDrafts.find(s => s.id === id);
+  if(!s) return;
+  s[field] = n(val);
+  const calcEl = document.getElementById('siloCalc_' + id);
+  if(calcEl) calcEl.innerHTML = siloCalcHtml(s);
+}
+function siloCalcHtml(s){
+  const isDirt = s.status === 'dirt';
+  if(isDirt && s.sampel){
+    const nu = (s.nu||0)/s.sampel*100, np = (s.np||0)/s.sampel*100, c=(s.c||0)/s.sampel*100;
+    const dirt = nu+np+c;
+    const bk = s.bk ? s.bk/s.sampel*100 : null;
+    const dirtStatus = dirt <= 7.0 ? 'ok' : 'warn';
+    const moistStatus = s.moist!==null ? (s.moist<=7.0?'ok':'warn') : null;
+    return `
+      <div class="result-row"><span class="k">Total Dirt Content</span><span class="v">${fmt(dirt,'%')}</span> ${badge(dirtStatus)}</div>
+      ${bk!==null?`<div class="result-row"><span class="k">%BK</span><span class="v">${fmt(bk,'%')}</span></div>`:''}
+      ${s.moist!==null?`<div class="result-row"><span class="k">Moisture</span><span class="v">${fmt(s.moist,'%')}</span> ${badge(moistStatus)}</div>`:''}`;
+  } else if(s.moist!==null){
+    const moistStatus = s.moist<=7.0?'ok':'warn';
+    return `<div class="result-row"><span class="k">Moisture</span><span class="v">${fmt(s.moist,'%')}</span> ${badge(moistStatus)}</div>`;
+  }
+  return '<div class="target-note">Isi berat sampel (atau moisture) untuk melihat hasil.</div>';
+}
+function renderSiloList(){
   const wrap = document.getElementById('siloList');
   if(!wrap) return;
   wrap.innerHTML = siloDrafts.map(s => {
     const isDirt = s.status === 'dirt';
-    let calc = '';
-    if(isDirt && s.sampel){
-      const nu = (s.nu||0)/s.sampel*100, np = (s.np||0)/s.sampel*100, c=(s.c||0)/s.sampel*100;
-      const dirt = nu+np+c;
-      const bk = s.bk ? s.bk/s.sampel*100 : null;
-      const dirtStatus = dirt <= 7.0 ? 'ok' : 'warn';
-      const moistStatus = s.moist!==null ? (s.moist<=7.0?'ok':'warn') : null;
-      calc = `
-        <div class="result-row"><span class="k">Total Dirt Content</span><span class="v">${fmt(dirt,'%')}</span> ${badge(dirtStatus)}</div>
-        ${bk!==null?`<div class="result-row"><span class="k">%BK</span><span class="v">${fmt(bk,'%')}</span></div>`:''}
-        ${s.moist!==null?`<div class="result-row"><span class="k">Moisture</span><span class="v">${fmt(s.moist,'%')}</span> ${badge(moistStatus)}</div>`:''}`;
-    } else if(s.moist!==null){
-      const moistStatus = s.moist<=7.0?'ok':'warn';
-      calc = `<div class="result-row"><span class="k">Moisture</span><span class="v">${fmt(s.moist,'%')}</span> ${badge(moistStatus)}</div>`;
-    }
     return `
     <div class="silo-card">
       <div class="silo-head">
@@ -725,22 +753,22 @@ function renderSiloList(skipInputRebuild){
         <button class="btn ghost small" onclick="removeSiloCard(${s.id})">Hapus</button>
       </div>
       <div class="field-row" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
-        <div class="field"><label>No. Silo</label><input type="text" value="${s.no}" oninput="updateSiloDraft(${s.id},'no',this.value)"></div>
+        <div class="field"><label>No. Silo</label><input type="text" value="${s.no||''}" oninput="onSiloTextChange(${s.id},'no',this.value)"></div>
         <div class="field"><label>Status</label>
-          <select onchange="updateSiloDraft(${s.id},'status',this.value)">
+          <select onchange="onSiloTextChange(${s.id},'status',this.value)">
             <option value="dirt" ${isDirt?'selected':''}>Sedang dikirim (data dirt lengkap)</option>
             <option value="moist" ${!isDirt?'selected':''}>Hanya moisture</option>
           </select>
         </div>
         ${isDirt ? `
-        <div class="field"><label>Berat Sampel (g)</label><input type="number" step="any" oninput="updateSiloDraft(${s.id},'sampel',this.value)"></div>
-        <div class="field"><label>Berat Nu (g)</label><input type="number" step="any" oninput="updateSiloDraft(${s.id},'nu',this.value)"></div>
-        <div class="field"><label>Berat Np (g)</label><input type="number" step="any" oninput="updateSiloDraft(${s.id},'np',this.value)"></div>
-        <div class="field"><label>Berat Cangkang (g)</label><input type="number" step="any" oninput="updateSiloDraft(${s.id},'c',this.value)"></div>
-        <div class="field"><label>Berat BK/IP (g)</label><input type="number" step="any" oninput="updateSiloDraft(${s.id},'bk',this.value)"></div>` : ''}
-        <div class="field"><label>Moisture (%) — dari alat ukur</label><input type="number" step="any" oninput="updateSiloDraft(${s.id},'moist',this.value)"></div>
+        <div class="field"><label>Berat Sampel (g)</label><input type="number" step="any" value="${s.sampel??''}" oninput="onSiloNumberInput(${s.id},'sampel',this.value)"></div>
+        <div class="field"><label>Berat Nu (g)</label><input type="number" step="any" value="${s.nu??''}" oninput="onSiloNumberInput(${s.id},'nu',this.value)"></div>
+        <div class="field"><label>Berat Np (g)</label><input type="number" step="any" value="${s.np??''}" oninput="onSiloNumberInput(${s.id},'np',this.value)"></div>
+        <div class="field"><label>Berat Cangkang (g)</label><input type="number" step="any" value="${s.c??''}" oninput="onSiloNumberInput(${s.id},'c',this.value)"></div>
+        <div class="field"><label>Berat BK/IP (g)</label><input type="number" step="any" value="${s.bk??''}" oninput="onSiloNumberInput(${s.id},'bk',this.value)"></div>` : ''}
+        <div class="field"><label>Moisture (%) — dari alat ukur</label><input type="number" step="any" value="${s.moist??''}" oninput="onSiloNumberInput(${s.id},'moist',this.value)"></div>
       </div>
-      ${calc ? `<div class="result-card" style="margin-top:10px;">${calc}</div>` : ''}
+      <div class="result-card" style="margin-top:10px;" id="siloCalc_${s.id}">${siloCalcHtml(s)}</div>
     </div>`;
   }).join('') || '<div class="empty-state">Belum ada silo ditambahkan.</div>';
 }
@@ -758,6 +786,188 @@ function commitSilos(){
   logAudit('Kernel Silo (jumlah entri)', state.session.kernelSilo.length || null, committed.length);
   state.session.kernelSilo = committed;
   renderSessionChips();
+}
+
+/* ===================================================================
+   PRESS CAKE (per shift, per line — Total Nut / Broken Nut / Broken Kernel)
+   Total Nut (gram) = Nu + Np + C + Ku + Kp
+   %Total Nut thdp sample   = Total Nut ÷ Berat Sampel
+   Broken Nut  = Np   -> thdp Total Nut, dan thdp sample
+   Broken Kernel = Kp -> thdp Total Nut, dan thdp sample
+=================================================================== */
+const pressCakeState = {
+  date: '',
+  1: { label:'Shift I (Malam)', I: [], II: [] },
+  2: { label:'Shift II (Siang)', I: [], II: [] }
+};
+let pcNextId = 1;
+
+function pcDefaultCard(no){
+  return {id: pcNextId++, no: no||'', sampel:null, nu:null, np:null, c:null, ku:null, kp:null};
+}
+function pcEnsureSeed(){
+  if(pressCakeState[1].I.length===0 && pressCakeState[1].II.length===0 &&
+     pressCakeState[2].I.length===0 && pressCakeState[2].II.length===0){
+    pressCakeState[1].I.push(pcDefaultCard('1'));
+    pressCakeState[1].II.push(pcDefaultCard('5'));
+  }
+}
+
+function renderPressCakeBody(body){
+  pcEnsureSeed();
+  body.innerHTML = `
+    <div class="field-row" style="grid-template-columns:220px;margin-bottom:14px;">
+      <div class="field"><label>Tanggal</label><input type="date" id="pcDate" value="${pressCakeState.date}" oninput="pressCakeState.date=this.value"></div>
+    </div>
+    <div id="pcShift1"></div>
+    <div id="pcShift2"></div>
+    <div class="row-actions">
+      <button class="btn primary" onclick="buildPressCakeReport()">Buat Laporan Press Cake</button>
+    </div>
+    <div id="pcReportWrap" style="margin-top:16px;display:none;">
+      <div class="report-box" id="pcReportOutput"></div>
+      <div class="copy-row"><button class="btn ghost small" onclick="copyPressCakeReport()">Salin Laporan</button></div>
+    </div>`;
+  renderPressCakeShift(1);
+  renderPressCakeShift(2);
+}
+
+function renderPressCakeShift(shift){
+  const el = document.getElementById('pcShift' + shift);
+  if(!el) return;
+  const sh = pressCakeState[shift];
+  el.innerHTML = `
+    <h3 style="font-size:13.5px;margin:10px 0 8px;">${sh.label}</h3>
+    <div class="field" style="max-width:280px;margin-bottom:10px;">
+      <input type="text" value="${sh.label}" oninput="pressCakeState[${shift}].label=this.value" placeholder="Label shift">
+    </div>
+    ${['I','II'].map(line => `
+      <div style="margin-bottom:14px;">
+        <div class="silo-head" style="margin-bottom:8px;">
+          <span class="title">Line ${line}</span>
+          <button class="btn ghost small" onclick="pcAddCard(${shift},'${line}')">+ Tambah Press Cake</button>
+        </div>
+        <div id="pcCards_${shift}_${line}">${sh[line].map(c => pcCardHtml(shift,line,c)).join('') || '<div class="empty-state">Belum ada press cake ditambahkan.</div>'}</div>
+      </div>`).join('')}
+  `;
+}
+
+function pcCardHtml(shift, line, c){
+  return `
+  <div class="silo-card" id="pcCard_${c.id}">
+    <div class="silo-head">
+      <span class="title">Press Cake <span id="pcNoLabel_${c.id}">${c.no||''}</span></span>
+      <button class="btn ghost small" onclick="pcRemoveCard(${shift},'${line}',${c.id})">Hapus</button>
+    </div>
+    <div class="field-row" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
+      <div class="field"><label>No. Press Cake</label><input type="text" value="${c.no||''}" oninput="pcTextInput(${c.id},'no',this.value)"></div>
+      <div class="field"><label>Berat Sampel (g)</label><input type="number" step="any" value="${c.sampel??''}" oninput="pcNumberInput(${c.id},'sampel',this.value)"></div>
+      <div class="field"><label>Berat Nu (g)</label><input type="number" step="any" value="${c.nu??''}" oninput="pcNumberInput(${c.id},'nu',this.value)"></div>
+      <div class="field"><label>Berat Np — Broken Nut (g)</label><input type="number" step="any" value="${c.np??''}" oninput="pcNumberInput(${c.id},'np',this.value)"></div>
+      <div class="field"><label>Berat Cangkang / C (g)</label><input type="number" step="any" value="${c.c??''}" oninput="pcNumberInput(${c.id},'c',this.value)"></div>
+      <div class="field"><label>Berat Ku (g)</label><input type="number" step="any" value="${c.ku??''}" oninput="pcNumberInput(${c.id},'ku',this.value)"></div>
+      <div class="field"><label>Berat Kp — Broken Kernel (g)</label><input type="number" step="any" value="${c.kp??''}" oninput="pcNumberInput(${c.id},'kp',this.value)"></div>
+    </div>
+    <div class="result-card" style="margin-top:10px;" id="pcCalc_${c.id}">${pcCalcHtml(c)}</div>
+  </div>`;
+}
+
+function pcCalcHtml(c){
+  const totalNutWeight = (c.nu||0)+(c.np||0)+(c.c||0)+(c.ku||0)+(c.kp||0);
+  if(!c.sampel || !totalNutWeight){
+    return '<div class="target-note">Isi berat sampel dan komponen (Nu/Np/C/Ku/Kp) untuk melihat hasil.</div>';
+  }
+  const totalNutPct = totalNutWeight/c.sampel*100;
+  const brokenNutVsNut = (c.np||0)/totalNutWeight*100;
+  const brokenKernelVsNut = (c.kp||0)/totalNutWeight*100;
+  const brokenNutVsSample = (c.np||0)/c.sampel*100;
+  const brokenKernelVsSample = (c.kp||0)/c.sampel*100;
+  return `
+    <div class="result-row"><span class="k">Total Nut thdp sample</span><span class="v">${fmt(totalNutPct,'%')}</span></div>
+    <div class="result-row"><span class="k">Broken Nut thdp total Nut</span><span class="v">${fmt(brokenNutVsNut,'%')}</span></div>
+    <div class="result-row"><span class="k">Broken Kernel thdp total Nut</span><span class="v">${fmt(brokenKernelVsNut,'%')}</span></div>
+    <div class="result-row"><span class="k">Broken Nut thdp sample</span><span class="v">${fmt(brokenNutVsSample,'%')}</span></div>
+    <div class="result-row"><span class="k">Broken Kernel thdp sample</span><span class="v">${fmt(brokenKernelVsSample,'%')}</span></div>`;
+}
+
+function pcFindCard(id){
+  for(const shift of [1,2]) for(const line of ['I','II']){
+    const c = pressCakeState[shift][line].find(c => c.id === id);
+    if(c) return c;
+  }
+  return null;
+}
+function pcTextInput(id, field, val){
+  const c = pcFindCard(id); if(!c) return;
+  c[field] = val;
+  if(field==='no'){ const lab = document.getElementById('pcNoLabel_'+id); if(lab) lab.textContent = val; }
+}
+function pcNumberInput(id, field, val){
+  const c = pcFindCard(id); if(!c) return;
+  c[field] = n(val);
+  const calcEl = document.getElementById('pcCalc_' + id);
+  if(calcEl) calcEl.innerHTML = pcCalcHtml(c);
+}
+function pcAddCard(shift, line){
+  pressCakeState[shift][line].push(pcDefaultCard(''));
+  renderPressCakeShift(shift);
+}
+function pcRemoveCard(shift, line, id){
+  pressCakeState[shift][line] = pressCakeState[shift][line].filter(c => c.id !== id);
+  renderPressCakeShift(shift);
+}
+
+function buildPressCakeReport(){
+  const dateVal = pressCakeState.date;
+  const dateLabel = dateVal
+    ? new Date(dateVal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long'}) + ' , ' +
+      new Date(dateVal+'T00:00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'.')
+    : '[tanggal]';
+
+  let lines = ['Press Cake Analisis', dateLabel];
+
+  [1,2].forEach(shift => {
+    const sh = pressCakeState[shift];
+    const hasData = ['I','II'].some(line => sh[line].some(c => c.sampel));
+    if(!hasData) return;
+    lines.push(sh.label);
+    ['I','II'].forEach(line => {
+      const cards = sh[line].filter(c => c.sampel);
+      if(cards.length === 0) return;
+      lines.push('Line ' + line);
+      cards.forEach(c => {
+        const res = pcCompute(c);
+        lines.push(`Press Cake ${c.no||''}`);
+        lines.push(`Total Nut thdp sample : ${fmt(res.totalNutPct)}%`);
+        lines.push(`Broken Nut thdp total Nut : ${fmt(res.brokenNutVsNut)}%`);
+        lines.push(`Broken Kernel thdp total Nut : ${fmt(res.brokenKernelVsNut)}%`);
+        lines.push(`Broken Nut thdp sample : ${fmt(res.brokenNutVsSample)}%`);
+        lines.push('');
+      });
+    });
+  });
+
+  const text = lines.join('\n').trim();
+  document.getElementById('pcReportOutput').textContent = text;
+  document.getElementById('pcReportWrap').style.display = 'block';
+}
+function pcCompute(c){
+  const totalNutWeight = (c.nu||0)+(c.np||0)+(c.c||0)+(c.ku||0)+(c.kp||0);
+  const totalNutPct = totalNutWeight/c.sampel*100;
+  return {
+    totalNutPct,
+    brokenNutVsNut: (c.np||0)/totalNutWeight*100,
+    brokenKernelVsNut: (c.kp||0)/totalNutWeight*100,
+    brokenNutVsSample: (c.np||0)/c.sampel*100,
+    brokenKernelVsSample: (c.kp||0)/c.sampel*100
+  };
+}
+function copyPressCakeReport(){
+  const text = document.getElementById('pcReportOutput').textContent;
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn = event.target; const old = btn.textContent;
+    btn.textContent = 'Tersalin ✓'; setTimeout(()=>btn.textContent = old, 1500);
+  });
 }
 
 /* ===================================================================
@@ -1024,7 +1234,7 @@ function renderAudit(){
 }
 
 /* ===================================================================
-   CAIRAN: Sulfit & OER
+   CAIRAN: Sulfit & FFA
 =================================================================== */
 function calcSulfit(){
   const v = n(document.getElementById('sulfitTitrasi').value);
@@ -1038,12 +1248,17 @@ function calcSulfit(){
   bd.textContent = `${v} × 0.0125 × ${faktor} × 1000 ÷ ${pembagi} = ${fmt(hasil)} ppm`;
 }
 
-function calcOER(){
-  const cpo = n(document.getElementById('oerCpo').value);
-  const tbs = n(document.getElementById('oerTbs').value);
-  const out = document.getElementById('oerHasil');
-  if(cpo===null || !tbs){ out.textContent = '—'; return; }
-  out.textContent = fmt(cpo/tbs*100, '%');
+function calcFFA(){
+  const titrasi = n(document.getElementById('ffaTitrasi').value);
+  const konstanta = n(document.getElementById('ffaKonstanta').value) ?? 25.6;
+  const normalitas = n(document.getElementById('ffaNormalitas').value) ?? 0.1035;
+  const sampel = n(document.getElementById('ffaSampel').value);
+  const out = document.getElementById('ffaHasil');
+  const bd = document.getElementById('ffaBreakdown');
+  if(titrasi===null || !sampel){ out.textContent = '—'; bd.textContent = 'Isi volume titrasi dan berat sampel untuk melihat hasil.'; return; }
+  const hasil = (titrasi * konstanta * normalitas) / sampel;
+  out.textContent = fmt(hasil,'%');
+  bd.textContent = `${titrasi} × ${konstanta} × ${normalitas} ÷ ${sampel} = ${fmt(hasil)}%`;
 }
 
 /* ===================================================================
