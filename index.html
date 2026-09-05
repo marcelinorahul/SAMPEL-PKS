@@ -1,0 +1,1074 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab QC PKS — Pelaporan Sampling</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F7F5;
+    --surface:#FFFFFF;
+    --surface-alt:#EBF1EE;
+    --ink:#152420;
+    --ink-muted:#5B6B65;
+    --border:#DAE5DF;
+    --brand:#1F5F52;
+    --brand-dark:#123A32;
+    --brand-soft:#E4F0EC;
+    --accent:#C1863C;
+    --ok-bg:#E6F3EA; --ok-ink:#1F7A46; --ok-line:#BEE3CB;
+    --warn-bg:#FBF1DE; --warn-ink:#93650F; --warn-line:#F0D8A4;
+    --danger-bg:#FCE9E7; --danger-ink:#A83227; --danger-line:#F3BFB8;
+    --radius:14px;
+    --shadow:0 1px 2px rgba(18,58,50,0.06), 0 6px 20px -8px rgba(18,58,50,0.12);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,h4{font-family:'Space Grotesk',sans-serif;margin:0;color:var(--brand-dark);}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  button{font-family:inherit;cursor:pointer;}
+  input,select,textarea{font-family:inherit;}
+  a{color:var(--brand);}
+
+  /* ---------- layout shell ---------- */
+  .app{max-width:1180px;margin:0 auto;padding:0 20px 64px;}
+  header.top{
+    background:linear-gradient(180deg,var(--brand-dark),var(--brand) 140%);
+    color:#EAF4F0;
+    padding:22px 20px 68px;
+    margin-bottom:-46px;
+  }
+  header.top .inner{max-width:1180px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand .mark{
+    width:42px;height:42px;border-radius:11px;background:rgba(255,255,255,0.14);
+    display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk';
+    font-weight:700;font-size:15px;letter-spacing:0.5px;border:1px solid rgba(255,255,255,0.25);
+  }
+  .brand h1{color:#fff;font-size:19px;font-weight:600;letter-spacing:-0.01em;}
+  .brand p{margin:2px 0 0;font-size:12.5px;color:#CDE6DC;}
+  .top-tabs{display:flex;gap:8px;background:rgba(255,255,255,0.1);padding:5px;border-radius:12px;}
+  .top-tab{
+    padding:9px 18px;border:none;background:transparent;color:#DCEFE8;border-radius:8px;
+    font-weight:600;font-size:13.5px;transition:background .15s ease, color .15s ease;
+  }
+  .top-tab.active{background:#fff;color:var(--brand-dark);}
+  .top-tab .soon{display:block;font-weight:500;font-size:10.5px;opacity:.75;margin-top:1px;}
+
+  main.card-shell{position:relative;z-index:1;}
+  .panel{
+    background:var(--surface);border:1px solid var(--border);border-radius:18px;
+    box-shadow:var(--shadow);padding:22px;margin-bottom:20px;
+  }
+  .panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
+  .panel-head h2{font-size:17px;}
+  .panel-head .hint{font-size:12.5px;color:var(--ink-muted);}
+
+  /* ---------- point sub-tabs ---------- */
+  .point-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:18px;scrollbar-width:thin;}
+  .point-tab{
+    flex:0 0 auto;padding:9px 15px;border-radius:999px;border:1px solid var(--border);
+    background:var(--surface-alt);color:var(--ink);font-size:13px;font-weight:600;white-space:nowrap;
+  }
+  .point-tab.active{background:var(--brand);border-color:var(--brand);color:#fff;}
+
+  .calc-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:22px;align-items:start;}
+  @media (max-width:820px){ .calc-grid{grid-template-columns:1fr;} }
+
+  .field-row{display:grid;grid-template-columns:1fr;gap:12px;}
+  .field{display:flex;flex-direction:column;gap:5px;}
+  .field label{font-size:12.5px;font-weight:600;color:var(--ink-muted);}
+  .field input, .field select{
+    padding:10px 12px;border:1px solid var(--border);border-radius:10px;font-size:14.5px;
+    background:#fff;color:var(--ink);
+  }
+  .field input:focus, .field select:focus, .field textarea:focus{outline:2px solid var(--brand);outline-offset:1px;}
+  .field .unit{font-size:11.5px;color:var(--ink-muted);}
+
+  .result-card{background:var(--surface-alt);border:1px solid var(--border);border-radius:14px;padding:16px;}
+  .result-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border);}
+  .result-row:last-child{border-bottom:none;}
+  .result-row .k{font-size:13px;color:var(--ink-muted);}
+  .result-row .v{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:15px;}
+  .target-note{font-size:12px;color:var(--ink-muted);margin-top:10px;}
+
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;font-size:12.5px;font-weight:700;border:1px solid;}
+  .badge.ok{background:var(--ok-bg);color:var(--ok-ink);border-color:var(--ok-line);}
+  .badge.warn{background:var(--warn-bg);color:var(--warn-ink);border-color:var(--warn-line);}
+  .badge.danger{background:var(--danger-bg);color:var(--danger-ink);border-color:var(--danger-line);}
+  .dot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+
+  .danger-alert{
+    margin-top:12px;padding:12px 14px;border-radius:12px;background:var(--danger-bg);
+    border:1px solid var(--danger-line);color:var(--danger-ink);font-size:13px;font-weight:600;
+    display:flex;gap:8px;align-items:flex-start;
+  }
+
+  .btn{
+    border-radius:10px;padding:10px 16px;font-weight:600;font-size:13.5px;border:1px solid transparent;
+  }
+  .btn.primary{background:var(--brand);color:#fff;}
+  .btn.primary:hover{background:var(--brand-dark);}
+  .btn.ghost{background:#fff;border-color:var(--border);color:var(--ink);}
+  .btn.ghost:hover{background:var(--surface-alt);}
+  .btn.small{padding:7px 12px;font-size:12.5px;}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+
+  .row-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;}
+
+  /* ---------- session summary ---------- */
+  .session-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;}
+  .chip{
+    border:1px solid var(--border);background:var(--surface-alt);border-radius:12px;padding:10px 12px;
+    display:flex;flex-direction:column;gap:2px;
+  }
+  .chip.filled{border-color:var(--brand);background:var(--brand-soft);}
+  .chip .label{font-size:11.5px;color:var(--ink-muted);font-weight:600;}
+  .chip .val{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;}
+  .chip .empty{color:var(--ink-muted);font-weight:500;font-size:13px;}
+
+  textarea.manual{
+    width:100%;min-height:38px;resize:vertical;padding:9px 11px;border:1px solid var(--border);
+    border-radius:9px;font-size:13.5px;
+  }
+  .manual-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px 14px;}
+
+  .report-box{
+    background:var(--brand-dark);color:#EAF4F0;border-radius:14px;padding:18px;
+    font-family:'JetBrains Mono',monospace;font-size:12.8px;line-height:1.65;white-space:pre-wrap;
+    overflow-x:auto;
+  }
+  .copy-row{display:flex;justify-content:flex-end;gap:8px;margin-top:10px;}
+
+  table.recap{width:100%;border-collapse:collapse;font-size:13.5px;}
+  table.recap th, table.recap td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--border);}
+  table.recap th{color:var(--ink-muted);font-size:11.5px;text-transform:none;font-weight:700;}
+  table.recap td.num{font-family:'JetBrains Mono',monospace;}
+
+  .audit-list{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow:auto;}
+  .audit-item{font-size:12.5px;color:var(--ink-muted);border-left:2px solid var(--accent);padding:4px 0 4px 10px;}
+  .audit-item b{color:var(--ink);}
+
+  .empty-state{
+    padding:26px;text-align:center;color:var(--ink-muted);font-size:13.5px;
+    border:1px dashed var(--border);border-radius:12px;
+  }
+
+  .silo-card{border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px;background:#fff;}
+  .silo-card .silo-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .silo-head .title{font-weight:700;font-size:13.5px;}
+
+  .liquid-note{
+    background:var(--surface-alt);border:1px solid var(--border);border-radius:12px;padding:14px 16px;
+    font-size:13px;color:var(--ink-muted);margin-bottom:16px;
+  }
+
+  footer.foot{text-align:center;color:var(--ink-muted);font-size:12px;padding:20px 0 6px;}
+
+  @media(max-width:640px){
+    header.top{padding:18px 16px 60px;}
+    .brand h1{font-size:17px;}
+    .panel{padding:16px;border-radius:14px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="inner">
+    <div class="brand">
+      <div class="mark">QC</div>
+      <div>
+        <h1>Lab QC Pabrik Kelapa Sawit</h1>
+        <p>Sampling · Perhitungan Otomatis · Laporan Siap Kirim</p>
+      </div>
+    </div>
+    <div class="top-tabs" role="tablist">
+      <button class="top-tab active" id="tabBtnPadatan" onclick="switchMenu('padatan')">Padatan</button>
+      <button class="top-tab" id="tabBtnCairan" onclick="switchMenu('cairan')">Cairan<span class="soon">sulfit &amp; OER</span></button>
+    </div>
+  </div>
+</header>
+
+<div class="app">
+<main class="card-shell">
+
+  <!-- =================== PADATAN =================== -->
+  <section id="menuPadatan">
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Titik Sampling</h2>
+        <span class="hint">Masukkan berat hasil timbangan (gram) — persentase dihitung otomatis</span>
+      </div>
+
+      <div class="point-tabs" id="pointTabs"></div>
+      <div id="pointBody"></div>
+    </div>
+
+    <!-- SESSION / 2-HOUR REPORT -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Sesi Laporan 2 Jam</h2>
+        <span class="hint" id="sessionMeta"></span>
+      </div>
+
+      <div class="field-row" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:16px;">
+        <div class="field">
+          <label>Tanggal</label>
+          <input type="date" id="sesiTanggal">
+        </div>
+        <div class="field">
+          <label>Jam Laporan</label>
+          <input type="time" id="sesiJam">
+        </div>
+        <div class="field">
+          <label>Press Beroperasi (unit)</label>
+          <input type="number" id="pressUnit" min="0" step="1">
+        </div>
+        <div class="field">
+          <label>Bunch Press Beroperasi (unit)</label>
+          <input type="number" id="bunchPressUnit" min="0" step="1">
+        </div>
+      </div>
+
+      <h3 style="font-size:13.5px;margin-bottom:8px;">Nilai padatan pada sesi ini</h3>
+      <div class="session-grid" id="sessionChips"></div>
+
+      <h3 style="font-size:13.5px;margin:18px 0 8px;">Data cairan &amp; suhu (isi manual — kalkulator cairan menyusul)</h3>
+      <div class="manual-grid" id="manualFields"></div>
+
+      <div class="field" style="margin-top:14px;">
+        <label>Catatan / status pengiriman</label>
+        <textarea class="manual" id="noteField" placeholder="Contoh: Dirt kernel silo 2 — Nut utuh: 0.90, Nut pecah: 1.17, Cangkang: 4.89, Total: 6.96"></textarea>
+      </div>
+
+      <div class="row-actions">
+        <button class="btn primary" onclick="buildReport()">Buat Laporan 2 Jam</button>
+        <button class="btn ghost" onclick="saveSessionToRecap()">Simpan Sesi ke Rekap Harian</button>
+        <button class="btn ghost" onclick="resetSession()">Sesi Baru / Reset</button>
+      </div>
+
+      <div id="reportOutputWrap" style="margin-top:16px;display:none;">
+        <div class="report-box" id="reportOutput"></div>
+        <div class="copy-row">
+          <button class="btn ghost small" onclick="copyReport()">Salin Laporan</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- DAILY RECAP -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Rekap Rata-Rata Harian</h2>
+        <span class="hint" id="recapMeta"></span>
+      </div>
+      <div id="recapBody"></div>
+    </div>
+
+    <!-- AUDIT TRAIL -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Riwayat Koreksi (Audit Trail)</h2>
+        <span class="hint">Perubahan angka yang sudah diinput tetap tercatat</span>
+      </div>
+      <div class="audit-list" id="auditList"><div class="empty-state">Belum ada koreksi tercatat.</div></div>
+    </div>
+
+  </section>
+
+  <!-- =================== CAIRAN =================== -->
+  <section id="menuCairan" style="display:none;">
+
+    <div class="panel">
+      <div class="liquid-note">
+        Modul lengkap analisa cairan (COT, CST, Sludge, Vacuum Dryer) menyusul. Dua kalkulator inti sudah aktif di bawah ini.
+      </div>
+      <div class="panel-head">
+        <h2>Kadar Sulfit — Boiler</h2>
+        <span class="hint">Rumus: Volume titrasi × 0.0125 × Faktor pengenceran × 1000 ÷ Volume sampel titrasi</span>
+      </div>
+      <div class="calc-grid">
+        <div class="field-row">
+          <div class="field">
+            <label>Volume titrasi (mL)</label>
+            <input type="number" step="any" id="sulfitTitrasi" oninput="calcSulfit()" placeholder="cth. 1.2">
+          </div>
+          <div class="field">
+            <label>Faktor pengenceran — total sampel (mL) <span class="unit">default 20 mL boiler + 30 mL aquades = 50</span></label>
+            <input type="number" step="any" id="sulfitFaktor" value="50" oninput="calcSulfit()">
+          </div>
+          <div class="field">
+            <label>Volume sampel dititrasi (mL) <span class="unit">default 20</span></label>
+            <input type="number" step="any" id="sulfitPembagi" value="20" oninput="calcSulfit()">
+          </div>
+        </div>
+        <div class="result-card">
+          <div class="result-row"><span class="k">Kadar Sulfit</span><span class="v" id="sulfitHasil">—</span></div>
+          <div class="target-note" id="sulfitBreakdown">Isi volume titrasi untuk melihat hasil.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>OER — Oil Extraction Rate</h2>
+        <span class="hint">Rumus standar: Produksi CPO ÷ Total TBS diolah × 100 — sesuaikan bila lab Anda memakai definisi lain</span>
+      </div>
+      <div class="calc-grid">
+        <div class="field-row">
+          <div class="field">
+            <label>Produksi CPO (ton)</label>
+            <input type="number" step="any" id="oerCpo" oninput="calcOER()">
+          </div>
+          <div class="field">
+            <label>Total TBS diolah (ton)</label>
+            <input type="number" step="any" id="oerTbs" oninput="calcOER()">
+          </div>
+        </div>
+        <div class="result-card">
+          <div class="result-row"><span class="k">OER</span><span class="v" id="oerHasil">—</span></div>
+          <div class="target-note">Beri tahu saya rumus OER yang dipakai di lab Anda bila berbeda dari standar ini, supaya bisa disesuaikan.</div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+</main>
+</div>
+
+<footer class="foot">Lab QC PKS — dihitung dari berat timbangan aktual, bukan target yang dibalik jadi berat.</footer>
+
+<script>
+/* ===================================================================
+   STATE
+=================================================================== */
+const state = {
+  activePoint: 'ripple',
+  session: emptySession(),
+  history: [],      // saved 2-hour sessions for daily recap
+  audit: []
+};
+
+function emptySession(){
+  return {
+    ripple: null, intiBasah: null, claybath: null,
+    ltds1: null, ltds2: null, fcyclone: {line1:null, line2:null},
+    kernelSilo: [],
+    manual: {}
+  };
+}
+
+function n(v){ const x = parseFloat(v); return isNaN(x) ? null : x; }
+function r2(v){ return v===null || v===undefined || isNaN(v) ? null : Math.round(v*100)/100; }
+function fmt(v, suffix){ return (v===null||v===undefined||isNaN(v)) ? '—' : (r2(v).toFixed(2) + (suffix||'')); }
+
+function badge(status){
+  const map = { ok:['ok','Normal'], warn:['warn','Perhatian'], danger:['danger','Wajib Foto & Lapor'] };
+  const [cls,label] = map[status];
+  return `<span class="badge ${cls}"><span class="dot"></span>${label}</span>`;
+}
+
+function logAudit(field, oldVal, newVal){
+  if(oldVal===null || oldVal===undefined) return; // first entry, not a correction
+  if(oldVal === newVal) return;
+  state.audit.unshift({field, oldVal, newVal, time: new Date().toLocaleString('id-ID')});
+  renderAudit();
+}
+
+/* ===================================================================
+   POINT DEFINITIONS (Padatan)
+=================================================================== */
+const POINTS = {
+  ripple: {
+    label: 'Ripple Mill',
+    inputs: [
+      {id:'unit', label:'Unit Ripple Mill', type:'text', placeholder:'cth. 2'},
+      {id:'sampel', label:'Berat Sampel (g)'},
+      {id:'nu', label:'Berat Nut Unbroken / Nu (g)'},
+      {id:'np', label:'Berat Nut Partially Broken / Np (g)'},
+      {id:'bk', label:'Berat Broken Kernel / BK (g)'}
+    ],
+    compute(v){
+      const nu = v.nu/v.sampel*100, np = v.np/v.sampel*100;
+      const totalNut = nu+np, efisiensi = 100-totalNut, bk = v.bk/v.sampel*100;
+      const effOk = efisiensi >= 98;
+      const bkOk = bk >= 11 && bk <= 12.5;
+      const status = (effOk && bkOk) ? 'ok' : 'warn';
+      return {unit:v.unit, nu, np, totalNut, efisiensi, bk, status, effOk, bkOk};
+    },
+    render(res){
+      return `
+        <div class="result-row"><span class="k">%Nu</span><span class="v">${fmt(res.nu,'%')}</span></div>
+        <div class="result-row"><span class="k">%Np</span><span class="v">${fmt(res.np,'%')}</span></div>
+        <div class="result-row"><span class="k">Total Nut</span><span class="v">${fmt(res.totalNut,'%')}</span></div>
+        <div class="result-row"><span class="k">Efisiensi</span><span class="v">${fmt(res.efisiensi,'%')}</span></div>
+        <div class="result-row"><span class="k">%BK (Broken Kernel)</span><span class="v">${fmt(res.bk,'%')}</span></div>
+        <div class="result-row"><span class="k">Status</span>${badge(res.status)}</div>
+        <div class="target-note">Target: Efisiensi ≥ 98.00% · Broken Kernel 11.00–12.50%</div>`;
+    }
+  },
+
+  intiBasah: {
+    label: 'Inti Basah',
+    inputs: [
+      {id:'sampel', label:'Berat Sampel (g)'},
+      {id:'nu', label:'Berat Nu (g)'},
+      {id:'np', label:'Berat Np (g)'},
+      {id:'c', label:'Berat Cangkang / C (g)'}
+    ],
+    compute(v){
+      const nu=v.nu/v.sampel*100, np=v.np/v.sampel*100, c=v.c/v.sampel*100;
+      const totalDirt = nu+np+c;
+      const status = totalDirt > 7.0 ? 'warn' : 'ok';
+      return {nu,np,c,totalDirt,status};
+    },
+    render(res){
+      return `
+        <div class="result-row"><span class="k">%Nu</span><span class="v">${fmt(res.nu,'%')}</span></div>
+        <div class="result-row"><span class="k">%Np</span><span class="v">${fmt(res.np,'%')}</span></div>
+        <div class="result-row"><span class="k">%C (Cangkang)</span><span class="v">${fmt(res.c,'%')}</span></div>
+        <div class="result-row"><span class="k">Total Dirt Content</span><span class="v">${fmt(res.totalDirt,'%')}</span></div>
+        <div class="result-row"><span class="k">Status</span>${badge(res.status)}</div>
+        <div class="target-note">Target: Dirt Content ≈ 6.50%–7.00%</div>`;
+    }
+  },
+
+  claybath: {
+    label: 'S-Claybath',
+    inputs: [
+      {id:'sampel', label:'Berat Sampel (g)'},
+      {id:'nu', label:'Berat Nu (g)'},
+      {id:'np', label:'Berat Np (g)'},
+      {id:'ku', label:'Berat Ku / Kernel Utuh (g)'},
+      {id:'kp', label:'Berat Kp / Kernel Pecah (g)'}
+    ],
+    compute(v){
+      const nu = v.nu*0.45/v.sampel*100;
+      const np = v.np*0.55/v.sampel*100;
+      const ku = v.ku/v.sampel*100;
+      const kp = v.kp/v.sampel*100;
+      const totalLosses = nu+np+ku+kp;
+      let status = 'ok';
+      if(totalLosses >= 0.90) status = 'danger';
+      else if(totalLosses > 0.80) status = 'warn';
+      return {nu,np,ku,kp,totalLosses,status};
+    },
+    render(res){
+      let alertHtml = '';
+      if(res.status === 'danger'){
+        alertHtml = `<div class="danger-alert">⚠ Total losses ≥ 0.90% — wajib upload foto piring timbang dan notifikasi ke operator claybath.</div>`;
+      }
+      return `
+        <div class="result-row"><span class="k">%Nu (×0.45)</span><span class="v">${fmt(res.nu,'%')}</span></div>
+        <div class="result-row"><span class="k">%Np (×0.55)</span><span class="v">${fmt(res.np,'%')}</span></div>
+        <div class="result-row"><span class="k">%Ku</span><span class="v">${fmt(res.ku,'%')}</span></div>
+        <div class="result-row"><span class="k">%Kp</span><span class="v">${fmt(res.kp,'%')}</span></div>
+        <div class="result-row"><span class="k">Total Losses</span><span class="v">${fmt(res.totalLosses,'%')}</span></div>
+        <div class="result-row"><span class="k">Status</span>${badge(res.status)}</div>
+        <div class="target-note">Normal 0.50%–0.80% · Ambang wajib foto + lapor: ≥ 0.90%</div>
+        ${alertHtml}`;
+    }
+  },
+
+  ltds1: {
+    label: 'LTDS I',
+    inputs: [
+      {id:'sampel', label:'Berat Sampel Blower (g)'},
+      {id:'ip', label:'Berat IP / Inti Pecah Terhisap (g)'}
+    ],
+    compute(v){
+      const losses = v.ip/v.sampel*100;
+      return {losses, status: losses <= 0.10 ? 'ok' : 'warn'};
+    },
+    render(res){
+      return `
+        <div class="result-row"><span class="k">%Losses (IP)</span><span class="v">${fmt(res.losses,'%')}</span></div>
+        <div class="result-row"><span class="k">Status</span>${badge(res.status)}</div>
+        <div class="target-note">Target: ≤ 0.10%</div>`;
+    }
+  },
+
+  ltds2: {
+    label: 'LTDS II',
+    inputs: [
+      {id:'sampel', label:'Berat Sampel Blower (g)'},
+      {id:'ip', label:'Berat IP / Inti Pecah Terhisap (g)'}
+    ],
+    compute(v){
+      const losses = v.ip/v.sampel*100;
+      return {losses, status: losses <= 0.45 ? 'ok' : 'warn'};
+    },
+    render(res){
+      return `
+        <div class="result-row"><span class="k">%Losses (IP)</span><span class="v">${fmt(res.losses,'%')}</span></div>
+        <div class="result-row"><span class="k">Status</span>${badge(res.status)}</div>
+        <div class="target-note">Target: ≤ 0.45%</div>`;
+    }
+  },
+
+  fcyclone: {
+    label: 'F.Cyclone',
+    isFcyclone: true,
+    inputs: [
+      {id:'sampel1', label:'Berat Sampel Line 1 (g)'},
+      {id:'ip1', label:'Berat IP Line 1 (g)'},
+      {id:'sampel2', label:'Berat Sampel Line 2 (g)'},
+      {id:'ip2', label:'Berat IP Line 2 (g)'}
+    ],
+    compute(v){
+      const l1 = (v.sampel1 && v.ip1!==null) ? v.ip1/v.sampel1*100 : null;
+      const l2 = (v.sampel2 && v.ip2!==null) ? v.ip2/v.sampel2*100 : null;
+      const s1 = l1===null ? null : (l1<=0.85?'ok':'warn');
+      const s2 = l2===null ? null : (l2<=0.85?'ok':'warn');
+      return {line1:l1, line2:l2, status1:s1, status2:s2};
+    },
+    render(res){
+      return `
+        <div class="result-row"><span class="k">Line 1</span><span class="v">${fmt(res.line1,'%')}</span></div>
+        <div class="result-row"><span class="k">Status Line 1</span>${res.status1?badge(res.status1):'—'}</div>
+        <div class="result-row"><span class="k">Line 2</span><span class="v">${fmt(res.line2,'%')}</span></div>
+        <div class="result-row"><span class="k">Status Line 2</span>${res.status2?badge(res.status2):'—'}</div>
+        <div class="target-note">Target: ≤ 0.85% — dihitung terpisah per line</div>`;
+    }
+  },
+
+  kernelSilo: {
+    label: 'Kernel Silo',
+    isSilo: true
+  }
+};
+
+const POINT_ORDER = ['ripple','intiBasah','claybath','ltds1','ltds2','fcyclone','kernelSilo'];
+
+/* ===================================================================
+   RENDER: point tabs + body
+=================================================================== */
+function renderPointTabs(){
+  const wrap = document.getElementById('pointTabs');
+  wrap.innerHTML = POINT_ORDER.map(key => {
+    const active = key === state.activePoint ? 'active' : '';
+    return `<button class="point-tab ${active}" onclick="selectPoint('${key}')">${POINTS[key].label}</button>`;
+  }).join('');
+}
+
+function selectPoint(key){
+  state.activePoint = key;
+  renderPointTabs();
+  renderPointBody();
+}
+
+function renderPointBody(){
+  const key = state.activePoint;
+  const def = POINTS[key];
+  const body = document.getElementById('pointBody');
+
+  if(def.isSilo){ renderSiloBody(body); return; }
+
+  const inputsHtml = def.inputs.map(f => `
+    <div class="field">
+      <label>${f.label}</label>
+      <input ${f.type==='text' ? 'type="text"' : 'type="number" step="any"'} id="in_${key}_${f.id}" placeholder="${f.placeholder||''}" oninput="recompute('${key}')">
+    </div>`).join('');
+
+  body.innerHTML = `
+    <div class="calc-grid">
+      <div class="field-row">${inputsHtml}</div>
+      <div class="result-card" id="result_${key}"><div class="target-note">Isi berat sampel untuk melihat hasil.</div></div>
+    </div>
+    <div class="row-actions">
+      <button class="btn primary" id="addBtn_${key}" onclick="addToSession('${key}')" disabled>Tambah ke Sesi Laporan</button>
+    </div>`;
+
+  recompute(key);
+}
+
+function collectInputs(key){
+  const def = POINTS[key];
+  const v = {};
+  let allNumericFilled = true;
+  def.inputs.forEach(f => {
+    const el = document.getElementById(`in_${key}_${f.id}`);
+    if(f.type === 'text'){ v[f.id] = el.value; return; }
+    const val = n(el.value);
+    v[f.id] = val;
+    if(val === null) allNumericFilled = false;
+  });
+  return {v, allNumericFilled};
+}
+
+function recompute(key){
+  const def = POINTS[key];
+  const {v, allNumericFilled} = collectInputs(key);
+  const resultEl = document.getElementById(`result_${key}`);
+  const btn = document.getElementById(`addBtn_${key}`);
+
+  if(key === 'fcyclone'){
+    // partial fill allowed (either line can be computed independently)
+    const res = def.compute(v);
+    if(res.line1===null && res.line2===null){
+      resultEl.innerHTML = '<div class="target-note">Isi berat sampel minimal salah satu line.</div>';
+      btn.disabled = true;
+    } else {
+      resultEl.innerHTML = def.render(res);
+      btn.disabled = false;
+    }
+    state._lastCompute = state._lastCompute || {};
+    state._lastCompute[key] = res;
+    return;
+  }
+
+  if(!allNumericFilled || !v.sampel){
+    resultEl.innerHTML = '<div class="target-note">Isi berat sampel untuk melihat hasil.</div>';
+    btn.disabled = true;
+    return;
+  }
+  const res = def.compute(v);
+  resultEl.innerHTML = def.render(res);
+  state._lastCompute = state._lastCompute || {};
+  state._lastCompute[key] = res;
+  btn.disabled = false;
+}
+
+function addToSession(key){
+  const res = state._lastCompute[key];
+  if(!res) return;
+  if(key === 'fcyclone'){
+    const old = state.session.fcyclone;
+    if(res.line1!==null) logAudit('F.Cyclone Line 1', old.line1, res.line1);
+    if(res.line2!==null) logAudit('F.Cyclone Line 2', old.line2, res.line2);
+    state.session.fcyclone = {line1: res.line1!==null?res.line1:old.line1, line2: res.line2!==null?res.line2:old.line2};
+  } else {
+    logAudit(POINTS[key].label, valueOf(state.session[key], key), valueOf(res, key));
+    state.session[key] = res;
+  }
+  renderSessionChips();
+}
+
+function valueOf(res, key){
+  if(!res) return null;
+  if(key==='ripple') return res.efisiensi;
+  if(key==='intiBasah') return res.totalDirt;
+  if(key==='claybath') return res.totalLosses;
+  if(key==='ltds1' || key==='ltds2') return res.losses;
+  return null;
+}
+
+/* ---------- Kernel Silo (dynamic multi-entry) ---------- */
+function renderSiloBody(body){
+  body.innerHTML = `
+    <div id="siloList"></div>
+    <div class="row-actions">
+      <button class="btn ghost small" onclick="addSiloCard()">+ Tambah Silo</button>
+      <button class="btn primary" onclick="commitSilos()">Tambah Semua Silo ke Sesi Laporan</button>
+    </div>`;
+  if(state.session.kernelSilo.length === 0){ addSiloDraftDefaults(); }
+  renderSiloList();
+}
+
+let siloDrafts = [];
+function addSiloDraftDefaults(){
+  siloDrafts = [
+    {id:1, no:'', status:'dirt', sampel:null,nu:null,np:null,c:null,bk:null,moist:null},
+    {id:2, no:'', status:'moist', sampel:null,nu:null,np:null,c:null,bk:null,moist:null}
+  ];
+}
+function addSiloCard(){
+  const id = (siloDrafts[siloDrafts.length-1]?.id || 0) + 1;
+  siloDrafts.push({id, no:'', status:'moist', sampel:null,nu:null,np:null,c:null,bk:null,moist:null});
+  renderSiloList();
+}
+function removeSiloCard(id){
+  siloDrafts = siloDrafts.filter(s => s.id !== id);
+  renderSiloList();
+}
+function updateSiloDraft(id, field, val){
+  const s = siloDrafts.find(s => s.id === id);
+  if(!s) return;
+  s[field] = (field==='no' || field==='status') ? val : n(val);
+  renderSiloList(true);
+}
+function renderSiloList(skipInputRebuild){
+  const wrap = document.getElementById('siloList');
+  if(!wrap) return;
+  wrap.innerHTML = siloDrafts.map(s => {
+    const isDirt = s.status === 'dirt';
+    let calc = '';
+    if(isDirt && s.sampel){
+      const nu = (s.nu||0)/s.sampel*100, np = (s.np||0)/s.sampel*100, c=(s.c||0)/s.sampel*100;
+      const dirt = nu+np+c;
+      const bk = s.bk ? s.bk/s.sampel*100 : null;
+      const dirtStatus = dirt <= 7.0 ? 'ok' : 'warn';
+      const moistStatus = s.moist!==null ? (s.moist<=7.0?'ok':'warn') : null;
+      calc = `
+        <div class="result-row"><span class="k">Total Dirt Content</span><span class="v">${fmt(dirt,'%')}</span> ${badge(dirtStatus)}</div>
+        ${bk!==null?`<div class="result-row"><span class="k">%BK</span><span class="v">${fmt(bk,'%')}</span></div>`:''}
+        ${s.moist!==null?`<div class="result-row"><span class="k">Moisture</span><span class="v">${fmt(s.moist,'%')}</span> ${badge(moistStatus)}</div>`:''}`;
+    } else if(s.moist!==null){
+      const moistStatus = s.moist<=7.0?'ok':'warn';
+      calc = `<div class="result-row"><span class="k">Moisture</span><span class="v">${fmt(s.moist,'%')}</span> ${badge(moistStatus)}</div>`;
+    }
+    return `
+    <div class="silo-card">
+      <div class="silo-head">
+        <span class="title">Kernel Silo</span>
+        <button class="btn ghost small" onclick="removeSiloCard(${s.id})">Hapus</button>
+      </div>
+      <div class="field-row" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
+        <div class="field"><label>No. Silo</label><input type="text" value="${s.no}" oninput="updateSiloDraft(${s.id},'no',this.value)"></div>
+        <div class="field"><label>Status</label>
+          <select onchange="updateSiloDraft(${s.id},'status',this.value)">
+            <option value="dirt" ${isDirt?'selected':''}>Sedang dikirim (data dirt lengkap)</option>
+            <option value="moist" ${!isDirt?'selected':''}>Hanya moisture</option>
+          </select>
+        </div>
+        ${isDirt ? `
+        <div class="field"><label>Berat Sampel (g)</label><input type="number" step="any" oninput="updateSiloDraft(${s.id},'sampel',this.value)"></div>
+        <div class="field"><label>Berat Nu (g)</label><input type="number" step="any" oninput="updateSiloDraft(${s.id},'nu',this.value)"></div>
+        <div class="field"><label>Berat Np (g)</label><input type="number" step="any" oninput="updateSiloDraft(${s.id},'np',this.value)"></div>
+        <div class="field"><label>Berat Cangkang (g)</label><input type="number" step="any" oninput="updateSiloDraft(${s.id},'c',this.value)"></div>
+        <div class="field"><label>Berat BK/IP (g)</label><input type="number" step="any" oninput="updateSiloDraft(${s.id},'bk',this.value)"></div>` : ''}
+        <div class="field"><label>Moisture (%) — dari alat ukur</label><input type="number" step="any" oninput="updateSiloDraft(${s.id},'moist',this.value)"></div>
+      </div>
+      ${calc ? `<div class="result-card" style="margin-top:10px;">${calc}</div>` : ''}
+    </div>`;
+  }).join('') || '<div class="empty-state">Belum ada silo ditambahkan.</div>';
+}
+
+function commitSilos(){
+  const committed = siloDrafts.map(s => {
+    if(s.status === 'dirt' && s.sampel){
+      const nu = (s.nu||0)/s.sampel*100, np=(s.np||0)/s.sampel*100, c=(s.c||0)/s.sampel*100;
+      const dirt = nu+np+c;
+      const bk = s.bk ? s.bk/s.sampel*100 : null;
+      return {no:s.no, status:'dirt_dilaporkan', dirt, bk, moist:s.moist};
+    }
+    return {no:s.no, status:'hanya_moist', dirt:null, bk:null, moist:s.moist};
+  }).filter(s => s.dirt !== null || s.moist !== null);
+  logAudit('Kernel Silo (jumlah entri)', state.session.kernelSilo.length || null, committed.length);
+  state.session.kernelSilo = committed;
+  renderSessionChips();
+}
+
+/* ===================================================================
+   SESSION CHIPS + MANUAL LIQUID FIELDS
+=================================================================== */
+const MANUAL_FIELDS = [
+  ['sebelumVacumMoist','Sebelum Vacum — Moist'],
+  ['sesudahFfa','Sesudah Vacum — FFA'],
+  ['sesudahMoist','Sesudah Vacum — Moist'],
+  ['sesudahDirt','Sesudah Vacum — Dirt'],
+  ['cotOil','COT — Oil'],['cotEmulsi','COT — Emulsi'],['cotMoist','COT — Moist'],['cotSludge','COT — Sludge'],
+  ['crudeOil','Crude Bunch Press — Oil'],['crudeEmulsi','Crude Bunch Press — Emulsi'],['crudeMoist','Crude Bunch Press — Moist'],['crudeSludge','Crude Bunch Press — Sludge'],
+  ['cst1Oil','CST 1 — Oil'],['cst1Emulsi','CST 1 — Emulsi'],['cst1Moist','CST 1 — Moist'],['cst1Sludge','CST 1 — Sludge'],
+  ['cst2Oil','CST 2 — Oil'],['cst2Emulsi','CST 2 — Emulsi'],['cst2Moist','CST 2 — Moist'],['cst2Sludge','CST 2 — Sludge'],
+  ['tempCst1','Temperatur CST 1'],['tempCst2','Temperatur CST 2'],['tempJuice','Temperatur Juice Tank'],['tempCot','Temperatur COT']
+];
+
+function renderManualFields(){
+  const wrap = document.getElementById('manualFields');
+  wrap.innerHTML = MANUAL_FIELDS.map(([id,label]) => `
+    <div class="field">
+      <label>${label}</label>
+      <input type="text" id="man_${id}" value="${state.session.manual[id]||''}" oninput="state.session.manual['${id}']=this.value">
+    </div>`).join('');
+}
+
+function renderSessionChips(){
+  const s = state.session;
+  const chips = [];
+  chips.push(chipHtml('LTDS I', s.ltds1 ? fmt(s.ltds1.losses,'%') : null));
+  chips.push(chipHtml('LTDS II', s.ltds2 ? fmt(s.ltds2.losses,'%') : null));
+  chips.push(chipHtml('F.Cyclone L1', s.fcyclone.line1!==null ? fmt(s.fcyclone.line1,'%') : null));
+  chips.push(chipHtml('F.Cyclone L2', s.fcyclone.line2!==null ? fmt(s.fcyclone.line2,'%') : null));
+  chips.push(chipHtml('W.S.Claybath', s.claybath ? fmt(s.claybath.totalLosses,'%') : null));
+  chips.push(chipHtml('Inti Basah (Dirt)', s.intiBasah ? fmt(s.intiBasah.totalDirt,'%') : null));
+  chips.push(chipHtml('Ripple Mill — Efisiensi', s.ripple ? fmt(s.ripple.efisiensi,'%') : null));
+  chips.push(chipHtml('Ripple Mill — Broken', s.ripple ? fmt(s.ripple.bk,'%') : null));
+  s.kernelSilo.forEach((k,i) => {
+    if(k.dirt!==null) chips.push(chipHtml(`Kernel Silo ${k.no||i+1} — Dirt`, fmt(k.dirt,'%')));
+    if(k.moist!==null) chips.push(chipHtml(`Kernel Silo ${k.no||i+1} — Moist`, fmt(k.moist,'%')));
+  });
+  document.getElementById('sessionChips').innerHTML = chips.join('');
+}
+function chipHtml(label,val){
+  return `<div class="chip ${val?'filled':''}"><span class="label">${label}</span><span class="${val?'val':'val empty'}">${val || 'Belum diisi'}</span></div>`;
+}
+
+/* ===================================================================
+   REPORT BUILDER (2-hour WhatsApp format)
+=================================================================== */
+function buildReport(){
+  const s = state.session;
+  const tanggal = document.getElementById('sesiTanggal').value;
+  const jam = document.getElementById('sesiJam').value;
+  const pressUnit = document.getElementById('pressUnit').value || '-';
+  const bunchUnit = document.getElementById('bunchPressUnit').value || '-';
+  const m = s.manual;
+
+  const dateLabel = tanggal ? new Date(tanggal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'}) : '[tanggal]';
+  const timeLabel = jam ? jam + ' WIB' : '[jam] WIB';
+
+  const dirtSilo = s.kernelSilo.find(k => k.dirt !== null);
+  const moistSilos = s.kernelSilo;
+
+  let lines = [];
+  lines.push(`*${dateLabel}*`);
+  lines.push(`*_Laporan Jam ${timeLabel}_*`);
+  lines.push('');
+  lines.push(`Sebelum Vacum`);
+  lines.push(`Moist. : ${m.sebelumVacumMoist||''}`);
+  lines.push('');
+  lines.push(`Sesudah Vacum`);
+  lines.push(`FFA : ${m.sesudahFfa||''}`);
+  lines.push(`Moist : ${m.sesudahMoist||''}`);
+  lines.push(`Dirt : ${m.sesudahDirt||''}`);
+  lines.push('');
+  lines.push(`COT`);
+  lines.push(`Oil : ${m.cotOil||''}`);
+  lines.push(`Emulsi : ${m.cotEmulsi||''}`);
+  lines.push(`Moist : ${m.cotMoist||''}`);
+  lines.push(`Sludge : ${m.cotSludge||''}`);
+  lines.push('');
+  lines.push(`Crude Bunch Press`);
+  lines.push(`Oil. : ${m.crudeOil||''}`);
+  lines.push(`Emulsi. : ${m.crudeEmulsi||''}`);
+  lines.push(`Moist. : ${m.crudeMoist||''}`);
+  lines.push(`Sludge. : ${m.crudeSludge||''}`);
+  lines.push('');
+  lines.push(`CST 1`);
+  lines.push(`Oil. : ${m.cst1Oil||''}`);
+  lines.push(`Emulsi : ${m.cst1Emulsi||''}`);
+  lines.push(`Moist : ${m.cst1Moist||''}`);
+  lines.push(`Sludge : ${m.cst1Sludge||''}`);
+  lines.push('');
+  lines.push(`CST 2`);
+  lines.push(`Oil : ${m.cst2Oil||''}`);
+  lines.push(`Emulsi : ${m.cst2Emulsi||''}`);
+  lines.push(`Moist : ${m.cst2Moist||''}`);
+  lines.push(`Sludge : ${m.cst2Sludge||''}`);
+  lines.push('');
+  lines.push(`Temperatur`);
+  lines.push(`CST 1. : ${m.tempCst1||''}`);
+  lines.push(`CST 2. : ${m.tempCst2||''}`);
+  lines.push(`Juice Tank : ${m.tempJuice||''}`);
+  lines.push(`COT. : ${m.tempCot||''}`);
+  lines.push('');
+  lines.push(`LTDS 1       Line 1 : ${s.ltds1?fmt(s.ltds1.losses):'-'}`);
+  lines.push(`LTDS 2       Line 1 : ${s.ltds2?fmt(s.ltds2.losses):'-'}`);
+  lines.push(`F.Cyclone  Line 1 : ${s.fcyclone.line1!==null?fmt(s.fcyclone.line1):'-'}`);
+  lines.push(`F.Cyclone  Line 2 : ${s.fcyclone.line2!==null?fmt(s.fcyclone.line2):'-'}`);
+  lines.push(`W.S.Clay    Line 1 : ${s.claybath?fmt(s.claybath.totalLosses):'-'}`);
+  lines.push('');
+  lines.push(`Inti Basah : ${s.intiBasah?fmt(s.intiBasah.totalDirt):'-'}`);
+  lines.push('');
+  lines.push(`Pengiriman Kernel Produksi *(Bunker ${pressUnit!=='-'?'':''}1 dan 2)*`);
+  moistSilos.forEach(k => {
+    lines.push(`*Kernel silo ${k.no||''}*`);
+    if(k.dirt!==null) lines.push(`Dirt. : ${fmt(k.dirt)}`);
+    lines.push(`Moist${k.dirt!==null?'.':''} : ${k.moist!==null?fmt(k.moist):''}`);
+    if(k.bk!==null) lines.push(`Broken : ${fmt(k.bk)}`);
+  });
+  lines.push('');
+  if(s.ripple){
+    lines.push(`*Ripple Mill ${s.ripple.unit||''}*`);
+    lines.push(`Efisiensi : ${fmt(s.ripple.efisiensi)}`);
+    lines.push(`Broken   : ${fmt(s.ripple.bk)}`);
+    lines.push('');
+  }
+  const note = document.getElementById('noteField').value;
+  lines.push(`Note : *${note||'-'}*`);
+  lines.push(`-Press Beroperasi : ${pressUnit} Unit`);
+  lines.push(`-Bunch Press Beroperasi : ${bunchUnit} Unit`);
+
+  const text = lines.join('\n');
+  document.getElementById('reportOutput').textContent = text;
+  document.getElementById('reportOutputWrap').style.display = 'block';
+  document.getElementById('reportOutput').dataset.raw = text;
+}
+
+function copyReport(){
+  const text = document.getElementById('reportOutput').textContent;
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn = event.target;
+    const old = btn.textContent;
+    btn.textContent = 'Tersalin ✓';
+    setTimeout(()=>btn.textContent = old, 1500);
+  }).catch(()=>{ alert('Gagal menyalin — salin manual dari kotak laporan.'); });
+}
+
+/* ===================================================================
+   DAILY RECAP
+=================================================================== */
+function saveSessionToRecap(){
+  const s = state.session;
+  const dirtSilo = s.kernelSilo.find(k => k.dirt !== null);
+  const entry = {
+    time: new Date().toLocaleString('id-ID'),
+    ltds1: s.ltds1 ? s.ltds1.losses : null,
+    ltds2: s.ltds2 ? s.ltds2.losses : null,
+    fc1: s.fcyclone.line1,
+    fc2: s.fcyclone.line2,
+    claybath: s.claybath ? s.claybath.totalLosses : null,
+    intiDirt: s.intiBasah ? s.intiBasah.totalDirt : null,
+    kernelMoist: dirtSilo ? dirtSilo.moist : null,
+    kernelDirt: dirtSilo ? dirtSilo.dirt : null,
+    rippleBroken: s.ripple ? s.ripple.bk : null
+  };
+  const hasAny = Object.values(entry).some(v => v!==null && typeof v!=='string');
+  if(!hasAny){ alert('Sesi ini belum punya nilai padatan untuk direkap.'); return; }
+  state.history.push(entry);
+  renderRecap();
+  alert('Sesi tersimpan ke rekap harian (' + state.history.length + ' sesi tercatat hari ini).');
+}
+
+function avg(arr){
+  const vals = arr.filter(v => v!==null && v!==undefined && !isNaN(v));
+  if(vals.length===0) return null;
+  return vals.reduce((a,b)=>a+b,0)/vals.length;
+}
+
+function renderRecap(){
+  document.getElementById('recapMeta').textContent = state.history.length + ' sesi tersimpan hari ini';
+  const body = document.getElementById('recapBody');
+  if(state.history.length === 0){
+    body.innerHTML = '<div class="empty-state">Belum ada sesi yang disimpan ke rekap. Simpan sesi 2-jam di atas untuk mulai menghitung rata-rata harian.</div>';
+    return;
+  }
+  const h = state.history;
+  const fcCombined = h.flatMap(e => [e.fc1, e.fc2]);
+  const moist = avg(h.map(e=>e.kernelMoist));
+  const dirtK = avg(h.map(e=>e.kernelDirt));
+  const broken = avg(h.map(e=>e.rippleBroken));
+  const ltds1a = avg(h.map(e=>e.ltds1));
+  const ltds2a = avg(h.map(e=>e.ltds2));
+  const fca = avg(fcCombined);
+  const claya = avg(h.map(e=>e.claybath));
+
+  const rows = [
+    ['Moist (Kernel Produksi)', moist],
+    ['Dirt (Kernel Produksi)', dirtK],
+    ['Broken Kernel', broken],
+    ['LTDS I', ltds1a],
+    ['LTDS II', ltds2a],
+    ['F. Cyclone (L1+L2 digabung)', fca],
+    ['S. Claybath', claya]
+  ];
+
+  body.innerHTML = `
+    <table class="recap">
+      <thead><tr><th>Parameter</th><th>Rata-rata</th></tr></thead>
+      <tbody>
+        ${rows.map(([k,v]) => `<tr><td>${k}</td><td class="num">${fmt(v,'%')}</td></tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="report-box" style="margin-top:14px;">${buildRecapText(rows)}</div>
+    <div class="copy-row"><button class="btn ghost small" onclick="copyRecap()">Salin Rekap</button></div>`;
+}
+
+function buildRecapText(rows){
+  const get = (label) => { const r = rows.find(r=>r[0]===label); return r? fmt(r[1]) : '-'; };
+  return [
+    '*Kualitas Kernel Produksi*',
+    `Moist                 : ${get('Moist (Kernel Produksi)')}`,
+    `Dirt                     : ${get('Dirt (Kernel Produksi)')}`,
+    `Broken Kernel  : ${get('Broken Kernel')}`,
+    '',
+    '*Losses Kernel*',
+    `LTDS I            : ${get('LTDS I')}`,
+    `LTDS II           : ${get('LTDS II')}`,
+    `F. Cyclone     : ${get('F. Cyclone (L1+L2 digabung)')}`,
+    `S. Claybath   : ${get('S. Claybath')}`
+  ].join('\n');
+}
+
+function copyRecap(){
+  const box = document.querySelectorAll('.report-box');
+  const el = box[box.length-1];
+  navigator.clipboard.writeText(el.textContent).then(()=>{
+    const btn = event.target; const old = btn.textContent;
+    btn.textContent = 'Tersalin ✓'; setTimeout(()=>btn.textContent=old,1500);
+  });
+}
+
+function resetSession(){
+  if(!confirm('Mulai sesi baru? Data sesi berjalan saat ini akan dikosongkan (rekap harian tidak terpengaruh).')) return;
+  state.session = emptySession();
+  addSiloDraftDefaults();
+  renderSessionChips();
+  renderManualFields();
+  document.getElementById('noteField').value = '';
+  document.getElementById('reportOutputWrap').style.display = 'none';
+  if(state.activePoint === 'kernelSilo') renderSiloList();
+}
+
+/* ===================================================================
+   AUDIT TRAIL
+=================================================================== */
+function renderAudit(){
+  const el = document.getElementById('auditList');
+  if(state.audit.length === 0){ el.innerHTML = '<div class="empty-state">Belum ada koreksi tercatat.</div>'; return; }
+  el.innerHTML = state.audit.map(a => `
+    <div class="audit-item"><b>${a.field}</b> diubah dari <b>${fmt(a.oldVal)}</b> menjadi <b>${fmt(a.newVal)}</b> — ${a.time}</div>
+  `).join('');
+}
+
+/* ===================================================================
+   CAIRAN: Sulfit & OER
+=================================================================== */
+function calcSulfit(){
+  const v = n(document.getElementById('sulfitTitrasi').value);
+  const faktor = n(document.getElementById('sulfitFaktor').value) ?? 50;
+  const pembagi = n(document.getElementById('sulfitPembagi').value) ?? 20;
+  const out = document.getElementById('sulfitHasil');
+  const bd = document.getElementById('sulfitBreakdown');
+  if(v===null || !pembagi){ out.textContent = '—'; bd.textContent = 'Isi volume titrasi untuk melihat hasil.'; return; }
+  const hasil = (v * 0.0125 * faktor * 1000) / pembagi;
+  out.textContent = fmt(hasil,' ppm');
+  bd.textContent = `${v} × 0.0125 × ${faktor} × 1000 ÷ ${pembagi} = ${fmt(hasil)} ppm`;
+}
+
+function calcOER(){
+  const cpo = n(document.getElementById('oerCpo').value);
+  const tbs = n(document.getElementById('oerTbs').value);
+  const out = document.getElementById('oerHasil');
+  if(cpo===null || !tbs){ out.textContent = '—'; return; }
+  out.textContent = fmt(cpo/tbs*100, '%');
+}
+
+/* ===================================================================
+   MENU SWITCH + INIT
+=================================================================== */
+function switchMenu(menu){
+  document.getElementById('menuPadatan').style.display = menu==='padatan' ? 'block' : 'none';
+  document.getElementById('menuCairan').style.display = menu==='cairan' ? 'block' : 'none';
+  document.getElementById('tabBtnPadatan').classList.toggle('active', menu==='padatan');
+  document.getElementById('tabBtnCairan').classList.toggle('active', menu==='cairan');
+}
+
+function initDefaults(){
+  const today = new Date();
+  document.getElementById('sesiTanggal').value = today.toISOString().slice(0,10);
+  document.getElementById('sesiJam').value = String(today.getHours()).padStart(2,'0') + ':00';
+}
+
+renderPointTabs();
+renderPointBody();
+renderSessionChips();
+renderManualFields();
+renderRecap();
+renderAudit();
+initDefaults();
+</script>
+</body>
+</html>
