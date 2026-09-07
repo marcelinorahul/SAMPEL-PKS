@@ -188,12 +188,14 @@
     <div class="brand">
       <div class="mark">QC</div>
       <div>
-        <h1>Lab QC Pabrik Kelapa Sawit</h1>
+        <h1>Analisa Sampel Cair dan Padat PKS</h1>
         <p>Sampling · Perhitungan Otomatis · Laporan Siap Kirim</p>
       </div>
     </div>
     <div class="top-tabs" role="tablist">
       <button class="top-tab active" id="tabBtnPadatan" onclick="switchMenu('padatan')">Padatan</button>
+      <button class="top-tab" id="tabBtnLaporan" onclick="switchMenu('laporan')">Laporan</button>
+      <button class="top-tab" id="tabBtnAcak" onclick="switchMenu('acak')">Acak<span class="soon"></span></button>
       <button class="top-tab" id="tabBtnCairan" onclick="switchMenu('cairan')">Cairan<span class="soon">sulfit &amp; FFA</span></button>
     </div>
   </div>
@@ -214,6 +216,11 @@
       <div class="point-tabs" id="pointTabs"></div>
       <div id="pointBody"></div>
     </div>
+
+  </section>
+
+  <!-- =================== LAPORAN (dipisah dari kalkulator biar tidak mengganggu input) =================== -->
+  <section id="menuLaporan" style="display:none;">
 
     <!-- SESSION / 2-HOUR REPORT -->
     <div class="panel">
@@ -241,7 +248,7 @@
         </div>
       </div>
 
-      <h3 style="font-size:13.5px;margin-bottom:8px;">Nilai padatan pada sesi ini</h3>
+      <h3 style="font-size:13.5px;margin-bottom:8px;">Nilai padatan pada sesi ini <span style="font-weight:400;color:var(--ink-muted);">(diisi dari tombol "Tambah ke Sesi Laporan" di tab Padatan)</span></h3>
       <div class="session-grid" id="sessionChips"></div>
 
       <h3 style="font-size:13.5px;margin:18px 0 8px;">Data cairan &amp; suhu (isi manual — kalkulator cairan menyusul)</h3>
@@ -284,6 +291,21 @@
       <div class="audit-list" id="auditList"><div class="empty-state">Belum ada koreksi tercatat.</div></div>
     </div>
 
+  </section>
+
+  <!-- =================== ACAK =================== -->
+  <section id="menuAcak" style="display:none;">
+    <div class="panel">
+      <div class="liquid-note" style="border-color:var(--warn-line);background:var(--warn-bg);color:var(--warn-ink);">
+        ⚠ Alat simulasi. Angka komponen dibuat <b>acak,</b> hasil di sini tidak tersambung ke Sesi Laporan, Rekap Harian, atau Audit Trail.
+      </div>
+      <div class="panel-head">
+        <h2>Random Picker Rentang Aman</h2>
+        <span class="hint">Pilih titik sampling, isi berat sampel, lalu tekan "Acak"</span>
+      </div>
+      <div class="point-tabs" id="acakTabs"></div>
+      <div id="acakBody"></div>
+    </div>
   </section>
 
   <!-- =================== CAIRAN =================== -->
@@ -380,6 +402,39 @@ function emptySession(){
 function n(v){ const x = parseFloat(v); return isNaN(x) ? null : x; }
 function r2(v){ return v===null || v===undefined || isNaN(v) ? null : Math.round(v*100)/100; }
 function fmt(v, suffix){ return (v===null||v===undefined||isNaN(v)) ? '—' : (r2(v).toFixed(2) + (suffix||'')); }
+function sumExact(...values){
+  return values.reduce((acc, val) => {
+    const n = Number(val);
+    return acc + (Number.isFinite(n) ? n : 0);
+  }, 0);
+}
+function sumRounded(...values){
+  return values.reduce((acc, val) => {
+    const n = Number(val);
+    return acc + (Number.isFinite(n) ? r2(n) : 0);
+  }, 0);
+}
+// Nilai pasti/presisi tinggi (tidak dibulatkan) — dipakai untuk verifikasi manual di lapangan,
+// supaya angka yang ditampilkan tidak "hilang" gara-gara pembulatan lebih awal.
+function exact(v, dp){
+  dp = dp===undefined ? 6 : dp;
+  return (v===null||v===undefined||isNaN(v)) ? '—' : v.toFixed(dp);
+}
+// Baris komponen biasa — ditampilkan presisi tinggi (6 desimal) supaya kalau dijumlah manual, cocok persis.
+function compRow(label, v, suffix){
+  suffix = suffix===undefined ? '%' : suffix;
+  if(v===null || v===undefined || isNaN(v)) return `<div class="result-row"><span class="k">${label}</span><span class="v">—</span></div>`;
+  const rounded = r2(v);
+  return `<div class="result-row"><span class="k">${label}</span><span class="v">${exact(v)}${suffix} (${fmt(v,suffix)})</span></div>`;
+}
+// Baris hasil akhir/komposit — ditampilkan DUA kali: nilai pasti (6 desimal, tidak dibulatkan)
+// dan nilai dibulatkan 2 desimal (format standar untuk laporan/pembacaan target).
+function dualRow(label, v, suffix){
+  suffix = suffix===undefined ? '%' : suffix;
+  return `
+    <div class="result-row"><span class="k">${label} — nilai pasti</span><span class="v">${exact(v)}${(v===null?'':suffix)}</span></div>
+    <div class="result-row"><span class="k">${label} — dibulatkan (2 desimal)</span><span class="v">${fmt(v,suffix)}</span></div>`;
+}
 
 function badge(status){
   const map = { ok:['ok','Normal'], warn:['warn','Perhatian'], danger:['danger','Wajib Foto & Lapor'] };
@@ -409,19 +464,23 @@ const POINTS = {
     ],
     compute(v){
       const nu = v.nu/v.sampel*100, np = v.np/v.sampel*100;
-      const totalNut = nu+np, efisiensi = 100-totalNut, bk = v.bk/v.sampel*100;
+      const totalNut = sumExact(nu, np);
+      const totalNutRounded = sumRounded(nu, np);
+      const efisiensi = 100 - totalNut;
+      const bk = v.bk/v.sampel*100;
       const effOk = efisiensi >= 98;
       const bkOk = bk >= 11 && bk <= 12.5;
       const status = (effOk && bkOk) ? 'ok' : 'warn';
-      return {unit:v.unit, nu, np, totalNut, efisiensi, bk, status, effOk, bkOk};
+      return {unit:v.unit, nu, np, totalNut, totalNutRounded, efisiensi, bk, status, effOk, bkOk};
     },
     render(res){
       return `
-        <div class="result-row"><span class="k">%Nu</span><span class="v">${fmt(res.nu,'%')}</span></div>
-        <div class="result-row"><span class="k">%Np</span><span class="v">${fmt(res.np,'%')}</span></div>
-        <div class="result-row"><span class="k">Total Nut</span><span class="v">${fmt(res.totalNut,'%')}</span></div>
-        <div class="result-row"><span class="k">Efisiensi</span><span class="v">${fmt(res.efisiensi,'%')}</span></div>
-        <div class="result-row"><span class="k">%BK (Broken Kernel)</span><span class="v">${fmt(res.bk,'%')}</span></div>
+        ${compRow('%Nu', res.nu)}
+        ${compRow('%Np', res.np)}
+        ${compRow('Total Nut', res.totalNut)}
+        ${compRow('Total Nut dari komponen dibulatkan', res.totalNutRounded)}
+        ${dualRow('Efisiensi', res.efisiensi)}
+        ${compRow('%BK (Broken Kernel)', res.bk)}
         <div class="result-row"><span class="k">Status</span>${badge(res.status)}</div>
         <div class="target-note">Target: Efisiensi ≥ 98.00% · Broken Kernel 11.00–12.50%</div>`;
     }
@@ -437,16 +496,18 @@ const POINTS = {
     ],
     compute(v){
       const nu=v.nu/v.sampel*100, np=v.np/v.sampel*100, c=v.c/v.sampel*100;
-      const totalDirt = nu+np+c;
+      const totalDirt = sumExact(nu, np, c);
+      const totalDirtRounded = sumRounded(nu, np, c);
       const status = totalDirt > 7.0 ? 'warn' : 'ok';
-      return {nu,np,c,totalDirt,status};
+      return {nu,np,c,totalDirt,totalDirtRounded,status};
     },
     render(res){
       return `
-        <div class="result-row"><span class="k">%Nu</span><span class="v">${fmt(res.nu,'%')}</span></div>
-        <div class="result-row"><span class="k">%Np</span><span class="v">${fmt(res.np,'%')}</span></div>
-        <div class="result-row"><span class="k">%C (Cangkang)</span><span class="v">${fmt(res.c,'%')}</span></div>
-        <div class="result-row"><span class="k">Total Dirt Content</span><span class="v">${fmt(res.totalDirt,'%')}</span></div>
+        ${compRow('%Nu', res.nu)}
+        ${compRow('%Np', res.np)}
+        ${compRow('%C (Cangkang)', res.c)}
+        ${dualRow('Total Dirt Content', res.totalDirt)}
+        ${compRow('Total Dirt dari komponen dibulatkan', res.totalDirtRounded)}
         <div class="result-row"><span class="k">Status</span>${badge(res.status)}</div>
         <div class="target-note">Target: Dirt Content ≈ 6.50%–7.00%</div>`;
     }
@@ -466,11 +527,12 @@ const POINTS = {
       const np = v.np*0.55/v.sampel*100;
       const ku = v.ku/v.sampel*100;
       const kp = v.kp/v.sampel*100;
-      const totalLosses = nu+np+ku+kp;
+      const totalLosses = sumExact(nu, np, ku, kp);
+      const totalLossesRounded = sumRounded(nu, np, ku, kp);
       let status = 'ok';
       if(totalLosses >= 0.90) status = 'danger';
       else if(totalLosses > 0.80) status = 'warn';
-      return {nu,np,ku,kp,totalLosses,status};
+      return {nu,np,ku,kp,totalLosses,totalLossesRounded,status};
     },
     render(res){
       let alertHtml = '';
@@ -478,11 +540,12 @@ const POINTS = {
         alertHtml = `<div class="danger-alert">⚠ Total losses ≥ 0.90% — wajib upload foto piring timbang dan notifikasi ke operator claybath.</div>`;
       }
       return `
-        <div class="result-row"><span class="k">%Nu (×0.45)</span><span class="v">${fmt(res.nu,'%')}</span></div>
-        <div class="result-row"><span class="k">%Np (×0.55)</span><span class="v">${fmt(res.np,'%')}</span></div>
-        <div class="result-row"><span class="k">%Ku</span><span class="v">${fmt(res.ku,'%')}</span></div>
-        <div class="result-row"><span class="k">%Kp</span><span class="v">${fmt(res.kp,'%')}</span></div>
-        <div class="result-row"><span class="k">Total Losses</span><span class="v">${fmt(res.totalLosses,'%')}</span></div>
+        ${compRow('%Nu (×0.45)', res.nu)}
+        ${compRow('%Np (×0.55)', res.np)}
+        ${compRow('%Ku', res.ku)}
+        ${compRow('%Kp', res.kp)}
+        ${dualRow('Total Losses', res.totalLosses)}
+        ${compRow('Total Losses dari komponen dibulatkan', res.totalLossesRounded)}
         <div class="result-row"><span class="k">Status</span>${badge(res.status)}</div>
         <div class="target-note">Normal 0.50%–0.80% · Ambang wajib foto + lapor: ≥ 0.90%</div>
         ${alertHtml}`;
@@ -501,7 +564,7 @@ const POINTS = {
     },
     render(res){
       return `
-        <div class="result-row"><span class="k">%Losses (IP)</span><span class="v">${fmt(res.losses,'%')}</span></div>
+        ${dualRow('%Losses (IP)', res.losses)}
         <div class="result-row"><span class="k">Status</span>${badge(res.status)}</div>
         <div class="target-note">Target: ≤ 0.10%</div>`;
     }
@@ -519,7 +582,7 @@ const POINTS = {
     },
     render(res){
       return `
-        <div class="result-row"><span class="k">%Losses (IP)</span><span class="v">${fmt(res.losses,'%')}</span></div>
+        ${dualRow('%Losses (IP)', res.losses)}
         <div class="result-row"><span class="k">Status</span>${badge(res.status)}</div>
         <div class="target-note">Target: ≤ 0.45%</div>`;
     }
@@ -543,9 +606,9 @@ const POINTS = {
     },
     render(res){
       return `
-        <div class="result-row"><span class="k">Line 1</span><span class="v">${fmt(res.line1,'%')}</span></div>
+        ${res.line1===null ? '<div class="result-row"><span class="k">Line 1</span><span class="v">—</span></div>' : dualRow('Line 1', res.line1)}
         <div class="result-row"><span class="k">Status Line 1</span>${res.status1?badge(res.status1):'—'}</div>
-        <div class="result-row"><span class="k">Line 2</span><span class="v">${fmt(res.line2,'%')}</span></div>
+        ${res.line2===null ? '<div class="result-row"><span class="k">Line 2</span><span class="v">—</span></div>' : dualRow('Line 2', res.line2)}
         <div class="result-row"><span class="k">Status Line 2</span>${res.status2?badge(res.status2):'—'}</div>
         <div class="target-note">Target: ≤ 0.85% — dihitung terpisah per line</div>`;
     }
@@ -727,13 +790,13 @@ function siloCalcHtml(s){
   const isDirt = s.status === 'dirt';
   if(isDirt && s.sampel){
     const nu = (s.nu||0)/s.sampel*100, np = (s.np||0)/s.sampel*100, c=(s.c||0)/s.sampel*100;
-    const dirt = nu+np+c;
+    const dirt = sumExact(nu, np, c);
     const bk = s.bk ? s.bk/s.sampel*100 : null;
     const dirtStatus = dirt <= 7.0 ? 'ok' : 'warn';
     const moistStatus = s.moist!==null ? (s.moist<=7.0?'ok':'warn') : null;
     return `
-      <div class="result-row"><span class="k">Total Dirt Content</span><span class="v">${fmt(dirt,'%')}</span> ${badge(dirtStatus)}</div>
-      ${bk!==null?`<div class="result-row"><span class="k">%BK</span><span class="v">${fmt(bk,'%')}</span></div>`:''}
+      ${dualRow('Total Dirt Content', dirt)} ${badge(dirtStatus)}
+      ${bk!==null?compRow('%BK', bk):''}
       ${s.moist!==null?`<div class="result-row"><span class="k">Moisture</span><span class="v">${fmt(s.moist,'%')}</span> ${badge(moistStatus)}</div>`:''}`;
   } else if(s.moist!==null){
     const moistStatus = s.moist<=7.0?'ok':'warn';
@@ -777,7 +840,7 @@ function commitSilos(){
   const committed = siloDrafts.map(s => {
     if(s.status === 'dirt' && s.sampel){
       const nu = (s.nu||0)/s.sampel*100, np=(s.np||0)/s.sampel*100, c=(s.c||0)/s.sampel*100;
-      const dirt = nu+np+c;
+      const dirt = sumExact(nu, np, c);
       const bk = s.bk ? s.bk/s.sampel*100 : null;
       return {no:s.no, status:'dirt_dilaporkan', dirt, bk, moist:s.moist};
     }
@@ -873,21 +936,21 @@ function pcCardHtml(shift, line, c){
 }
 
 function pcCalcHtml(c){
-  const totalNutWeight = (c.nu||0)+(c.np||0)+(c.c||0)+(c.ku||0)+(c.kp||0);
+  const totalNutWeight = sumExact(c.nu||0, c.np||0, c.c||0, c.ku||0, c.kp||0);
   if(!c.sampel || !totalNutWeight){
     return '<div class="target-note">Isi berat sampel dan komponen (Nu/Np/C/Ku/Kp) untuk melihat hasil.</div>';
   }
   const totalNutPct = totalNutWeight/c.sampel*100;
-  const brokenNutVsNut = (c.np||0)/totalNutWeight*100;
-  const brokenKernelVsNut = (c.kp||0)/totalNutWeight*100;
-  const brokenNutVsSample = (c.np||0)/c.sampel*100;
-  const brokenKernelVsSample = (c.kp||0)/c.sampel*100;
+  const brokenNutVsNut = sumExact(c.np||0)/totalNutWeight*100;
+  const brokenKernelVsNut = sumExact(c.kp||0)/totalNutWeight*100;
+  const brokenNutVsSample = sumExact(c.np||0)/c.sampel*100;
+  const brokenKernelVsSample = sumExact(c.kp||0)/c.sampel*100;
   return `
-    <div class="result-row"><span class="k">Total Nut thdp sample</span><span class="v">${fmt(totalNutPct,'%')}</span></div>
-    <div class="result-row"><span class="k">Broken Nut thdp total Nut</span><span class="v">${fmt(brokenNutVsNut,'%')}</span></div>
-    <div class="result-row"><span class="k">Broken Kernel thdp total Nut</span><span class="v">${fmt(brokenKernelVsNut,'%')}</span></div>
-    <div class="result-row"><span class="k">Broken Nut thdp sample</span><span class="v">${fmt(brokenNutVsSample,'%')}</span></div>
-    <div class="result-row"><span class="k">Broken Kernel thdp sample</span><span class="v">${fmt(brokenKernelVsSample,'%')}</span></div>`;
+    ${dualRow('Total Nut thdp sample', totalNutPct)}
+    ${compRow('Broken Nut thdp total Nut', brokenNutVsNut)}
+    ${compRow('Broken Kernel thdp total Nut', brokenKernelVsNut)}
+    ${compRow('Broken Nut thdp sample', brokenNutVsSample)}
+    ${compRow('Broken Kernel thdp sample', brokenKernelVsSample)}`;
 }
 
 function pcFindCard(id){
@@ -942,6 +1005,7 @@ function buildPressCakeReport(){
         lines.push(`Broken Nut thdp total Nut : ${fmt(res.brokenNutVsNut)}%`);
         lines.push(`Broken Kernel thdp total Nut : ${fmt(res.brokenKernelVsNut)}%`);
         lines.push(`Broken Nut thdp sample : ${fmt(res.brokenNutVsSample)}%`);
+        lines.push(`Broken Kernel thdp sample : ${fmt(res.brokenKernelVsSample)}%`);
         lines.push('');
       });
     });
@@ -952,14 +1016,14 @@ function buildPressCakeReport(){
   document.getElementById('pcReportWrap').style.display = 'block';
 }
 function pcCompute(c){
-  const totalNutWeight = (c.nu||0)+(c.np||0)+(c.c||0)+(c.ku||0)+(c.kp||0);
+  const totalNutWeight = sumExact(c.nu||0, c.np||0, c.c||0, c.ku||0, c.kp||0);
   const totalNutPct = totalNutWeight/c.sampel*100;
   return {
     totalNutPct,
-    brokenNutVsNut: (c.np||0)/totalNutWeight*100,
-    brokenKernelVsNut: (c.kp||0)/totalNutWeight*100,
-    brokenNutVsSample: (c.np||0)/c.sampel*100,
-    brokenKernelVsSample: (c.kp||0)/c.sampel*100
+    brokenNutVsNut: sumExact(c.np||0)/totalNutWeight*100,
+    brokenKernelVsNut: sumExact(c.kp||0)/totalNutWeight*100,
+    brokenNutVsSample: sumExact(c.np||0)/c.sampel*100,
+    brokenKernelVsSample: sumExact(c.kp||0)/c.sampel*100
   };
 }
 function copyPressCakeReport(){
@@ -1262,13 +1326,175 @@ function calcFFA(){
 }
 
 /* ===================================================================
+   ACAK / RANDOM PICKER (latihan) — memakai ulang compute()/render() dari
+   POINTS supaya hasilnya konsisten dengan kalkulator utama. Tidak
+   tersambung ke Sesi Laporan / Rekap / Audit Trail (sesuai catatan di UI).
+=================================================================== */
+let acakActivePoint = 'ripple';
+const ACAK_ORDER = ['ripple','intiBasah','claybath','ltds1','ltds2','fcyclone'];
+
+function rand(min,max){ return Math.random()*(max-min)+min; }
+
+// Generator berat komponen (gram) yang dijamin jatuh di rentang aman/target
+// masing-masing titik sampling, berdasarkan berat sampel yang diisi user.
+const ACAK_GENERATORS = {
+  ripple(sampel){
+    const efisiensi = rand(98.05, 99.6);
+    const bkPct = rand(11.05, 12.45);
+    const totalNutPct = 100 - efisiensi;
+    const npShare = rand(0.2,0.4);
+    const npPct = totalNutPct*npShare, nuPct = totalNutPct-npPct;
+    return {
+      unit: 'Acak',
+      sampel,
+      nu: r2(nuPct*sampel/100),
+      np: r2(npPct*sampel/100),
+      bk: r2(bkPct*sampel/100)
+    };
+  },
+  intiBasah(sampel){
+    const totalDirt = rand(6.55,6.95);
+    const nuShare = rand(0.3,0.45), npShare = rand(0.2,0.35);
+    const nuPct = totalDirt*nuShare, npPct = totalDirt*npShare, cPct = totalDirt-nuPct-npPct;
+    return { sampel, nu:r2(nuPct*sampel/100), np:r2(npPct*sampel/100), c:r2(cPct*sampel/100) };
+  },
+  claybath(sampel){
+    const totalLosses = rand(0.52,0.78);
+    const w1 = rand(0.15,0.3), w2 = rand(0.15,0.3), w3 = rand(0.15,0.3);
+    const sumW = w1+w2+w3;
+    const nuPct = totalLosses*w1/sumW, npPct = totalLosses*w2/sumW;
+    const remaining = Math.max(totalLosses - nuPct - npPct, 0);
+    const kuPct = remaining*rand(0.4,0.6), kpPct = remaining-kuPct;
+    return {
+      sampel,
+      nu: r2(nuPct*sampel/(100*0.45)),
+      np: r2(npPct*sampel/(100*0.55)),
+      ku: r2(kuPct*sampel/100),
+      kp: r2(kpPct*sampel/100)
+    };
+  },
+  ltds1(sampel){
+    const losses = rand(0.03,0.09);
+    return { sampel, ip: r2(losses*sampel/100) };
+  },
+  ltds2(sampel){
+    const losses = rand(0.06,0.40);
+    return { sampel, ip: r2(losses*sampel/100) };
+  },
+  fcyclone(sampel1, sampel2){
+    const line1Pct = rand(0.42, 0.82);
+    const line2Pct = rand(0.48, 0.84);
+    return {
+      sampel1,
+      ip1: r2(line1Pct * sampel1 / 100),
+      sampel2,
+      ip2: r2(line2Pct * sampel2 / 100)
+    };
+  }
+};
+
+const ACAK_INPUT_LABELS = {
+  unit:'Unit', sampel:'Berat Sampel (g)', sampel1:'Berat Sampel Line 1 (g)', sampel2:'Berat Sampel Line 2 (g)',
+  nu:'Berat Nu (g)', np:'Berat Np (g)', bk:'Berat BK (g)', c:'Berat Cangkang (g)', ku:'Berat Ku (g)', kp:'Berat Kp (g)', ip:'Berat IP (g)', ip1:'Berat IP Line 1 (g)', ip2:'Berat IP Line 2 (g)'
+};
+
+function renderAcakTabs(){
+  const wrap = document.getElementById('acakTabs');
+  if(!wrap) return;
+  wrap.innerHTML = ACAK_ORDER.map(key => {
+    const active = key === acakActivePoint ? 'active' : '';
+    return `<button class="point-tab ${active}" onclick="selectAcakPoint('${key}')">${POINTS[key].label}</button>`;
+  }).join('');
+}
+
+function selectAcakPoint(key){
+  acakActivePoint = key;
+  renderAcakTabs();
+  renderAcakBody();
+}
+
+function renderAcakBody(){
+  const body = document.getElementById('acakBody');
+  if(!body) return;
+
+  const isFcyclone = acakActivePoint === 'fcyclone';
+  const sampleFields = isFcyclone ? `
+    <div class="field">
+      <label>Berat Sampel Line 1 (g)</label>
+      <input type="number" step="any" id="acakSampel1" placeholder="cth. 120" value="120">
+    </div>
+    <div class="field">
+      <label>Berat Sampel Line 2 (g)</label>
+      <input type="number" step="any" id="acakSampel2" placeholder="cth. 140" value="140">
+    </div>
+  ` : `
+    <div class="field">
+      <label>Berat Sampel (g)</label>
+      <input type="number" step="any" id="acakSampel" placeholder="cth. 100" value="100">
+    </div>
+  `;
+
+  body.innerHTML = `
+    <div class="calc-grid">
+      <div class="field-row">${sampleFields}</div>
+      <div class="result-card" id="acakResult"><div class="target-note">Tekan "Acak" untuk membuat data latihan.</div></div>
+    </div>
+    <div class="row-actions">
+      <button class="btn primary" onclick="runAcak()">= Acak</button>
+    </div>
+    <div class="result-card" id="acakInputsUsed" style="margin-top:12px;display:none;"></div>`;
+}
+
+function runAcak(){
+  const key = acakActivePoint;
+  const def = POINTS[key];
+  let gen;
+
+  if(key === 'fcyclone'){
+    const sampel1 = n(document.getElementById('acakSampel1').value);
+    const sampel2 = n(document.getElementById('acakSampel2').value);
+    if(!sampel1 || sampel1 <= 0 || !sampel2 || sampel2 <= 0){
+      alert('Isi berat sampel Line 1 dan Line 2 (gram) dulu, masing-masing harus lebih dari 0.');
+      return;
+    }
+    gen = ACAK_GENERATORS[key](sampel1, sampel2);
+  } else {
+    const sampelEl = document.getElementById('acakSampel');
+    const sampel = n(sampelEl.value);
+    if(!sampel || sampel <= 0){ alert('Isi berat sampel (gram) dulu, harus lebih dari 0.'); return; }
+    gen = ACAK_GENERATORS[key](sampel);
+  }
+
+  const res = def.compute(gen);
+  document.getElementById('acakResult').innerHTML = def.render(res);
+
+  const usedWrap = document.getElementById('acakInputsUsed');
+  const rows = Object.entries(gen)
+    .filter(([k]) => k !== 'unit')
+    .map(([k,v]) => `<div class="result-row"><span class="k">${ACAK_INPUT_LABELS[k]||k}</span><span class="v">${v}</span></div>`)
+    .join('');
+  usedWrap.innerHTML = `<div class="target-note" style="margin-bottom:6px;">Berat komponen hasil acak (gram) — coba masukkan manual di tab Padatan untuk latihan:</div>${rows}`;
+  usedWrap.style.display = 'block';
+}
+
+function initAcak(){
+  renderAcakTabs();
+  renderAcakBody();
+}
+
+/* ===================================================================
    MENU SWITCH + INIT
 =================================================================== */
 function switchMenu(menu){
   document.getElementById('menuPadatan').style.display = menu==='padatan' ? 'block' : 'none';
+  document.getElementById('menuLaporan').style.display = menu==='laporan' ? 'block' : 'none';
+  document.getElementById('menuAcak').style.display = menu==='acak' ? 'block' : 'none';
   document.getElementById('menuCairan').style.display = menu==='cairan' ? 'block' : 'none';
   document.getElementById('tabBtnPadatan').classList.toggle('active', menu==='padatan');
+  document.getElementById('tabBtnLaporan').classList.toggle('active', menu==='laporan');
+  document.getElementById('tabBtnAcak').classList.toggle('active', menu==='acak');
   document.getElementById('tabBtnCairan').classList.toggle('active', menu==='cairan');
+  if(menu==='acak' && !state._acakInit){ initAcak(); state._acakInit = true; }
 }
 
 function initDefaults(){
