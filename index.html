@@ -270,7 +270,7 @@
         </div>
         <div class="field">
           <label>Jam Laporan</label>
-          <input type="time" id="sesiJam">
+          <input type="text" inputmode="numeric" id="sesiJam" placeholder="cth. 24:00">
         </div>
         <div class="field">
           <label>Press Beroperasi (unit)</label>
@@ -279,6 +279,14 @@
         <div class="field">
           <label>Bunch Press Beroperasi (unit)</label>
           <input type="number" inputmode="numeric" id="bunchPressUnit" min="0" step="1">
+        </div>
+        <div class="field">
+          <label>Bunker Kernel Produksi</label>
+          <select id="bunkerGroup">
+            <option value="1 dan 2">Bunker 1 dan 2</option>
+            <option value="3 dan 4">Bunker 3 dan 4</option>
+            <option value="5 dan 6">Bunker 5 dan 6</option>
+          </select>
         </div>
       </div>
 
@@ -477,6 +485,7 @@ function saveDraft(){
       sesiJam: document.getElementById('sesiJam')?.value || '',
       pressUnit: document.getElementById('pressUnit')?.value || '',
       bunchPressUnit: document.getElementById('bunchPressUnit')?.value || '',
+      bunkerGroup: document.getElementById('bunkerGroup')?.value || '1 dan 2',
       noteField: document.getElementById('noteField')?.value || '',
       waNumber: document.getElementById('waNumber')?.value || ''
     },
@@ -1255,6 +1264,7 @@ const MANUAL_FIELDS = [
   ['sesudahMoist','Sesudah Vacum — Moist'],
   ['sesudahDirt','Sesudah Vacum — Dirt'],
   ['cotOil','COT — Oil'],['cotEmulsi','COT — Emulsi'],['cotMoist','COT — Moist'],['cotSludge','COT — Sludge'],
+  ['cotFfa','COT — FFA'],
   ['crudeOil','Crude Bunch Press — Oil'],['crudeEmulsi','Crude Bunch Press — Emulsi'],['crudeMoist','Crude Bunch Press — Moist'],['crudeSludge','Crude Bunch Press — Sludge'],
   ['cst1Oil','CST 1 — Oil'],['cst1Emulsi','CST 1 — Emulsi'],['cst1Moist','CST 1 — Moist'],['cst1Sludge','CST 1 — Sludge'],
   ['cst2Oil','CST 2 — Oil'],['cst2Emulsi','CST 2 — Emulsi'],['cst2Moist','CST 2 — Moist'],['cst2Sludge','CST 2 — Sludge'],
@@ -1300,55 +1310,58 @@ function buildReport(){
   const jam = document.getElementById('sesiJam').value;
   const pressUnit = document.getElementById('pressUnit').value || '-';
   const bunchUnit = document.getElementById('bunchPressUnit').value || '-';
+  const bunkerGroup = document.getElementById('bunkerGroup').value || '1 dan 2';
   const m = s.manual;
 
-  const dateLabel = tanggal ? new Date(tanggal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'}) : '[tanggal]';
+  const dateLabel = tanggal
+    ? new Date(tanggal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,' - ')
+    : '[tanggal]';
   const timeLabel = jam ? jam + ' WIB' : '[jam] WIB';
 
-  const dirtSilo = s.kernelSilo.find(k => k.dirt !== null);
   const moistSilos = s.kernelSilo;
 
   let lines = [];
   lines.push(`*${dateLabel}*`);
   lines.push(`*_Laporan Jam ${timeLabel}_*`);
   lines.push('');
-  lines.push(`Sebelum Vacum`);
-  lines.push(`Moist. : ${m.sebelumVacumMoist||''}`);
+  lines.push(`*Sebelum Vacum*`);
+  lines.push(`Moist.   : ${m.sebelumVacumMoist||''}`);
   lines.push('');
-  lines.push(`Sesudah Vacum`);
-  lines.push(`FFA : ${m.sesudahFfa||''}`);
-  lines.push(`Moist : ${m.sesudahMoist||''}`);
-  lines.push(`Dirt : ${m.sesudahDirt||''}`);
+  lines.push(`*Sesudah Vacum*`);
+  lines.push(`FFA       : ${m.sesudahFfa||''}`);
+  lines.push(`Moist    : ${m.sesudahMoist||''}`);
+  lines.push(`Dirt        : ${m.sesudahDirt||''}`);
   lines.push('');
-  lines.push(`COT`);
-  lines.push(`Oil : ${m.cotOil||''}`);
-  lines.push(`Emulsi : ${m.cotEmulsi||''}`);
-  lines.push(`Moist : ${m.cotMoist||''}`);
-  lines.push(`Sludge : ${m.cotSludge||''}`);
+  lines.push(`*COT*`);
+  lines.push(`Oil           : ${m.cotOil||''}`);
+  lines.push(`Emulsi    : ${m.cotEmulsi||''}`);
+  lines.push(`Moist      : ${m.cotMoist||''}`);
+  lines.push(`Sludge    : ${m.cotSludge||''}`);
+  lines.push(`FFA         : ${m.cotFfa||''}`);
   lines.push('');
-  lines.push(`Crude Bunch Press`);
-  lines.push(`Oil. : ${m.crudeOil||''}`);
-  lines.push(`Emulsi. : ${m.crudeEmulsi||''}`);
-  lines.push(`Moist. : ${m.crudeMoist||''}`);
-  lines.push(`Sludge. : ${m.crudeSludge||''}`);
+  lines.push(`*Crude Bunch Press*`);
+  lines.push(`Oil.         : ${m.crudeOil||''}`);
+  lines.push(`Emulsi.  : ${m.crudeEmulsi||''}`);
+  lines.push(`Moist.    : ${m.crudeMoist||''}`);
+  lines.push(`Sludge.  : ${m.crudeSludge||''}`);
   lines.push('');
-  lines.push(`CST 1`);
-  lines.push(`Oil. : ${m.cst1Oil||''}`);
-  lines.push(`Emulsi : ${m.cst1Emulsi||''}`);
-  lines.push(`Moist : ${m.cst1Moist||''}`);
-  lines.push(`Sludge : ${m.cst1Sludge||''}`);
+  lines.push(`*CST 1*`);
+  lines.push(`Oil.          : ${m.cst1Oil||''}`);
+  lines.push(`Emulsi    : ${m.cst1Emulsi||''}`);
+  lines.push(`Moist      : ${m.cst1Moist||''}`);
+  lines.push(`Sludge    : ${m.cst1Sludge||''}`);
   lines.push('');
-  lines.push(`CST 2`);
-  lines.push(`Oil : ${m.cst2Oil||''}`);
-  lines.push(`Emulsi : ${m.cst2Emulsi||''}`);
-  lines.push(`Moist : ${m.cst2Moist||''}`);
-  lines.push(`Sludge : ${m.cst2Sludge||''}`);
+  lines.push(`*CST 2*`);
+  lines.push(`Oil            : ${m.cst2Oil||''}`);
+  lines.push(`Emulsi     : ${m.cst2Emulsi||''}`);
+  lines.push(`Moist       : ${m.cst2Moist||''}`);
+  lines.push(`Sludge     : ${m.cst2Sludge||''}`);
   lines.push('');
-  lines.push(`Temperatur`);
-  lines.push(`CST 1. : ${m.tempCst1||''}`);
-  lines.push(`CST 2. : ${m.tempCst2||''}`);
+  lines.push(`*Temperatur*`);
+  lines.push(`CST 1.         : ${m.tempCst1||''}`);
+  lines.push(`CST 2.         : ${m.tempCst2||''}`);
   lines.push(`Juice Tank : ${m.tempJuice||''}`);
-  lines.push(`COT. : ${m.tempCot||''}`);
+  lines.push(`COT.            : ${m.tempCot||''}`);
   lines.push('');
   lines.push(`LTDS 1       Line 1 : ${s.ltds1?fmt(s.ltds1.losses):'-'}`);
   lines.push(`LTDS 2       Line 1 : ${s.ltds2?fmt(s.ltds2.losses):'-'}`);
@@ -1358,7 +1371,7 @@ function buildReport(){
   lines.push('');
   lines.push(`Inti Basah : ${s.intiBasah?fmt(s.intiBasah.totalDirt):'-'}`);
   lines.push('');
-  lines.push(`Pengiriman Kernel Produksi *(Bunker ${pressUnit!=='-'?'':''}1 dan 2)*`);
+  lines.push(`Pengiriman Kernel Produksi *(Bunker ${bunkerGroup})*`);
   moistSilos.forEach(k => {
     lines.push(`*Kernel silo ${k.no||''}*`);
     if(k.dirt!==null) lines.push(`Dirt. : ${fmt(k.dirt)}`);
