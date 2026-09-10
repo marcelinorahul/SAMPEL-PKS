@@ -91,6 +91,10 @@
     padding:10px 12px;border:1px solid var(--border);border-radius:10px;font-size:14.5px;
     background:#fff;color:var(--ink);
   }
+  .field .number-control{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:6px;align-items:stretch;}
+  .field .number-control input{width:100%;min-width:0;text-align:center;font-size:17px;font-weight:700;padding:10px 8px;}
+  .step-btn{border:1px solid var(--border);border-radius:10px;background:var(--surface-alt);color:var(--brand-dark);font-size:22px;font-weight:700;line-height:1;min-height:44px;padding:0;touch-action:manipulation;}
+  .step-btn:active{background:var(--brand-soft);transform:scale(.97);}
   .field input:focus, .field select:focus, .field textarea:focus{outline:2px solid var(--brand);outline-offset:1px;}
   .field .unit{font-size:11.5px;color:var(--ink-muted);}
 
@@ -172,6 +176,18 @@
     font-size:13px;color:var(--ink-muted);margin-bottom:16px;
   }
 
+  .formula-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px;}
+  .formula-stat{border:1px solid var(--border);background:var(--surface-alt);border-radius:12px;padding:12px;}
+  .formula-stat .label{display:block;color:var(--ink-muted);font-size:12px;font-weight:600;}
+  .formula-stat .value{display:block;font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;margin-top:3px;}
+  .formula-list{display:flex;flex-direction:column;gap:8px;}
+  .formula-item{border:1px solid var(--border);border-left:4px solid var(--ok-ink);border-radius:10px;padding:11px 13px;background:#fff;}
+  .formula-item.fail{border-left-color:var(--danger-ink);background:var(--danger-bg);}
+  .formula-item-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;}
+  .formula-item .name{font-weight:700;font-size:13.5px;}
+  .formula-item .expression{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--brand-dark);margin-top:5px;word-break:break-word;}
+  .formula-item .detail{font-size:12px;color:var(--ink-muted);margin-top:5px;}
+
   footer.foot{text-align:center;color:var(--ink-muted);font-size:12px;padding:20px 0 6px;}
 
   @media(max-width:640px){
@@ -195,6 +211,7 @@
     <div class="top-tabs" role="tablist">
       <button class="top-tab active" id="tabBtnPadatan" onclick="switchMenu('padatan')">Padatan</button>
       <button class="top-tab" id="tabBtnLaporan" onclick="switchMenu('laporan')">Laporan</button>
+      <button class="top-tab" id="tabBtnRumus" onclick="switchMenu('rumus')">Rumus</button>
       <button class="top-tab" id="tabBtnAcak" onclick="switchMenu('acak')">Acak<span class="soon"></span></button>
       <button class="top-tab" id="tabBtnCairan" onclick="switchMenu('cairan')">Cairan<span class="soon">sulfit &amp; FFA</span></button>
     </div>
@@ -226,7 +243,7 @@
     <div class="panel">
       <div class="panel-head">
         <h2>Sesi Laporan 2 Jam</h2>
-        <span class="hint" id="sessionMeta"></span>
+        <span class="hint" id="sessionMeta">Draft belum disimpan</span>
       </div>
 
       <div class="field-row" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:16px;">
@@ -240,11 +257,11 @@
         </div>
         <div class="field">
           <label>Press Beroperasi (unit)</label>
-          <input type="number" id="pressUnit" min="0" step="1">
+          <input type="number" inputmode="numeric" id="pressUnit" min="0" step="1">
         </div>
         <div class="field">
           <label>Bunch Press Beroperasi (unit)</label>
-          <input type="number" id="bunchPressUnit" min="0" step="1">
+          <input type="number" inputmode="numeric" id="bunchPressUnit" min="0" step="1">
         </div>
       </div>
 
@@ -259,6 +276,12 @@
         <textarea class="manual" id="noteField" placeholder="Contoh: Dirt kernel silo 2 — Nut utuh: 0.90, Nut pecah: 1.17, Cangkang: 4.89, Total: 6.96"></textarea>
       </div>
 
+      <div class="field" style="margin-top:14px;max-width:360px;">
+        <label>Nomor tujuan WhatsApp (opsional)</label>
+        <input type="tel" id="waNumber" placeholder="62812xxxxxxx">
+        <span class="unit">Kosongkan untuk membuka WhatsApp dan memilih chat/grup.</span>
+      </div>
+
       <div class="row-actions">
         <button class="btn primary" onclick="buildReport()">Buat Laporan 2 Jam</button>
         <button class="btn ghost" onclick="saveSessionToRecap()">Simpan Sesi ke Rekap Harian</button>
@@ -269,6 +292,7 @@
         <div class="report-box" id="reportOutput"></div>
         <div class="copy-row">
           <button class="btn ghost small" onclick="copyReport()">Salin Laporan</button>
+          <button class="btn primary small" onclick="sendReportToWhatsApp()">Kirim ke WA</button>
         </div>
       </div>
     </div>
@@ -291,6 +315,22 @@
       <div class="audit-list" id="auditList"><div class="empty-state">Belum ada koreksi tercatat.</div></div>
     </div>
 
+  </section>
+
+  <!-- =================== VALIDASI RUMUS =================== -->
+  <section id="menuRumus" style="display:none;">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Validasi Rumus</h2>
+        <span class="hint" id="formulaCheckedAt">Belum dijalankan</span>
+      </div>
+      <div class="liquid-note">Pemeriksaan ini menjalankan contoh angka yang diketahui terhadap fungsi perhitungan aktif. Status <b>Valid</b> berarti hasil kode cocok dengan hasil analisis yang diharapkan, bukan berarti data lapangan otomatis benar.</div>
+      <div class="formula-summary" id="formulaSummary"></div>
+      <div class="formula-list" id="formulaList"></div>
+      <div class="row-actions">
+        <button class="btn primary" onclick="runFormulaAudit()">Periksa Semua Rumus</button>
+      </div>
+    </div>
   </section>
 
   <!-- =================== ACAK =================== -->
@@ -323,15 +363,15 @@
         <div class="field-row">
           <div class="field">
             <label>Volume titrasi (mL)</label>
-            <input type="number" step="any" id="sulfitTitrasi" oninput="calcSulfit()" placeholder="cth. 1.2">
+            <input type="number" inputmode="decimal" step="any" id="sulfitTitrasi" oninput="calcSulfit()" placeholder="cth. 1.2">
           </div>
           <div class="field">
             <label>Faktor pengenceran — total sampel (mL) <span class="unit">default 20 mL boiler + 30 mL aquades = 50</span></label>
-            <input type="number" step="any" id="sulfitFaktor" value="50" oninput="calcSulfit()">
+            <input type="number" inputmode="decimal" step="any" id="sulfitFaktor" value="50" oninput="calcSulfit()">
           </div>
           <div class="field">
             <label>Volume sampel dititrasi (mL) <span class="unit">default 20</span></label>
-            <input type="number" step="any" id="sulfitPembagi" value="20" oninput="calcSulfit()">
+            <input type="number" inputmode="decimal" step="any" id="sulfitPembagi" value="20" oninput="calcSulfit()">
           </div>
         </div>
         <div class="result-card">
@@ -350,19 +390,19 @@
         <div class="field-row">
           <div class="field">
             <label>Volume titrasi NaOH (mL)</label>
-            <input type="number" step="any" id="ffaTitrasi" oninput="calcFFA()" placeholder="cth. 4.9">
+            <input type="number" inputmode="decimal" step="any" id="ffaTitrasi" oninput="calcFFA()" placeholder="cth. 4.9">
           </div>
           <div class="field">
             <label>Konstanta <span class="unit">tetap</span></label>
-            <input type="number" step="any" id="ffaKonstanta" value="25.6" oninput="calcFFA()">
+            <input type="number" inputmode="decimal" step="any" id="ffaKonstanta" value="25.6" oninput="calcFFA()">
           </div>
           <div class="field">
             <label>Normalitas NaOH <span class="unit">bisa berubah tiap larutan</span></label>
-            <input type="number" step="any" id="ffaNormalitas" value="0.1035" oninput="calcFFA()">
+            <input type="number" inputmode="decimal" step="any" id="ffaNormalitas" value="0.1035" oninput="calcFFA()">
           </div>
           <div class="field">
             <label>Berat Sampel (g) <span class="unit">biasanya 3–4 gram</span></label>
-            <input type="number" step="any" id="ffaSampel" oninput="calcFFA()" placeholder="cth. 3.434">
+            <input type="number" inputmode="decimal" step="any" id="ffaSampel" oninput="calcFFA()" placeholder="cth. 3.434">
           </div>
         </div>
         <div class="result-card">
@@ -377,7 +417,7 @@
 </main>
 </div>
 
-<footer class="foot">Lab QC PKS — dihitung dari berat timbangan aktual, bukan target yang dibalik jadi berat.</footer>
+<footer class="foot">Otomatisasi Laboratorium PKS — By : Rahul</footer>
 
 <script>
 /* ===================================================================
@@ -389,6 +429,9 @@ const state = {
   history: [],      // saved 2-hour sessions for daily recap
   audit: []
 };
+const DRAFT_KEY = 'labQcPksDraftV1';
+let draftSaveTimer = null;
+let draftPointInputs = {};
 
 function emptySession(){
   return {
@@ -398,6 +441,78 @@ function emptySession(){
     manual: {}
   };
 }
+
+function capturePointInputs(){
+  document.querySelectorAll('[id^="in_"]').forEach(el => {
+    draftPointInputs[el.id] = el.value;
+  });
+}
+
+function saveDraft(){
+  capturePointInputs();
+  const draft = {
+    state: {session: state.session, history: state.history, audit: state.audit, activePoint: state.activePoint},
+    siloDrafts,
+    pressCakeState,
+    pointInputs: draftPointInputs,
+    form: {
+      sesiTanggal: document.getElementById('sesiTanggal')?.value || '',
+      sesiJam: document.getElementById('sesiJam')?.value || '',
+      pressUnit: document.getElementById('pressUnit')?.value || '',
+      bunchPressUnit: document.getElementById('bunchPressUnit')?.value || '',
+      noteField: document.getElementById('noteField')?.value || '',
+      waNumber: document.getElementById('waNumber')?.value || ''
+    },
+    savedAt: new Date().toISOString()
+  };
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    const meta = document.getElementById('sessionMeta');
+    if(meta) meta.textContent = 'Draft tersimpan ' + new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+  } catch(err) {
+    console.warn('Draft tidak dapat disimpan:', err);
+  }
+}
+
+function scheduleDraftSave(){
+  clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(saveDraft, 150);
+}
+
+function restoreDraft(){
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if(!raw) return false;
+    const draft = JSON.parse(raw);
+    if(!draft?.state?.session) return false;
+    Object.assign(state, draft.state);
+    state.session = Object.assign(emptySession(), draft.state.session);
+    state.session.fcyclone = Object.assign({line1:null,line2:null}, draft.state.session.fcyclone || {});
+    state.session.manual = draft.state.session.manual || {};
+    state.history = Array.isArray(draft.state.history) ? draft.state.history : [];
+    state.audit = Array.isArray(draft.state.audit) ? draft.state.audit : [];
+    draftPointInputs = draft.pointInputs || {};
+    siloDrafts = Array.isArray(draft.siloDrafts) ? draft.siloDrafts : [];
+    if(draft.pressCakeState) Object.assign(pressCakeState, draft.pressCakeState);
+    const form = draft.form || {};
+    Object.entries(form).forEach(([id,value]) => {
+      const el = document.getElementById(id);
+      if(el) el.value = value || '';
+    });
+    return true;
+  } catch(err) {
+    console.warn('Draft tidak dapat dipulihkan:', err);
+    return false;
+  }
+}
+
+function clearDraft(){
+  try { localStorage.removeItem(DRAFT_KEY); } catch(err) { console.warn('Draft tidak dapat dihapus:', err); }
+}
+
+document.addEventListener('input', scheduleDraftSave);
+document.addEventListener('change', scheduleDraftSave);
+document.addEventListener('click', scheduleDraftSave);
 
 function n(v){ const x = parseFloat(v); return isNaN(x) ? null : x; }
 function r2(v){ return v===null || v===undefined || isNaN(v) ? null : Math.round(v*100)/100; }
@@ -413,6 +528,21 @@ function sumRounded(...values){
     const n = Number(val);
     return acc + (Number.isFinite(n) ? r2(n) : 0);
   }, 0);
+}
+function stepperInputHtml(id, value, handler, placeholder){
+  return `<div class="number-control">
+    <button type="button" class="step-btn" aria-label="Kurangi 0,1 gram" onclick="adjustNumberInput('${id}',-0.1)">−</button>
+    <input id="${id}" type="number" step="0.1" inputmode="decimal" value="${value??''}" placeholder="${placeholder||''}" oninput="${handler}">
+    <button type="button" class="step-btn" aria-label="Tambah 0,1 gram" onclick="adjustNumberInput('${id}',0.1)">+</button>
+  </div>`;
+}
+function adjustNumberInput(id, delta){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const current = n(el.value);
+  const next = Math.max(0, (current===null ? 0 : current) + delta);
+  el.value = Number(next.toFixed(1));
+  el.dispatchEvent(new Event('input', {bubbles:true}));
 }
 // Nilai pasti/presisi tinggi (tidak dibulatkan) — dipakai untuk verifikasi manual di lapangan,
 // supaya angka yang ditampilkan tidak "hilang" gara-gara pembulatan lebih awal.
@@ -655,7 +785,9 @@ function renderPointBody(){
   const inputsHtml = def.inputs.map(f => `
     <div class="field">
       <label>${f.label}</label>
-      <input ${f.type==='text' ? 'type="text"' : 'type="number" step="any"'} id="in_${key}_${f.id}" placeholder="${f.placeholder||''}" oninput="recompute('${key}')">
+      ${f.type==='text'
+        ? `<input type="text" id="in_${key}_${f.id}" placeholder="${f.placeholder||''}" oninput="recompute('${key}')">`
+        : stepperInputHtml(`in_${key}_${f.id}`, '', `recompute('${key}')`, f.placeholder)}
     </div>`).join('');
 
   body.innerHTML = `
@@ -667,6 +799,11 @@ function renderPointBody(){
       <button class="btn primary" id="addBtn_${key}" onclick="addToSession('${key}')" disabled>Tambah ke Sesi Laporan</button>
     </div>`;
 
+  def.inputs.forEach(f => {
+    const saved = draftPointInputs[`in_${key}_${f.id}`];
+    const el = document.getElementById(`in_${key}_${f.id}`);
+    if(el && saved !== undefined) el.value = saved;
+  });
   recompute(key);
 }
 
@@ -749,7 +886,7 @@ function renderSiloBody(body){
       <button class="btn ghost small" onclick="addSiloCard()">+ Tambah Silo</button>
       <button class="btn primary" onclick="commitSilos()">Tambah Semua Silo ke Sesi Laporan</button>
     </div>`;
-  if(state.session.kernelSilo.length === 0){ addSiloDraftDefaults(); }
+  if(siloDrafts.length === 0){ addSiloDraftDefaults(); }
   renderSiloList();
 }
 
@@ -824,12 +961,12 @@ function renderSiloList(){
           </select>
         </div>
         ${isDirt ? `
-        <div class="field"><label>Berat Sampel (g)</label><input type="number" step="any" value="${s.sampel??''}" oninput="onSiloNumberInput(${s.id},'sampel',this.value)"></div>
-        <div class="field"><label>Berat Nu (g)</label><input type="number" step="any" value="${s.nu??''}" oninput="onSiloNumberInput(${s.id},'nu',this.value)"></div>
-        <div class="field"><label>Berat Np (g)</label><input type="number" step="any" value="${s.np??''}" oninput="onSiloNumberInput(${s.id},'np',this.value)"></div>
-        <div class="field"><label>Berat Cangkang (g)</label><input type="number" step="any" value="${s.c??''}" oninput="onSiloNumberInput(${s.id},'c',this.value)"></div>
-        <div class="field"><label>Berat BK/IP (g)</label><input type="number" step="any" value="${s.bk??''}" oninput="onSiloNumberInput(${s.id},'bk',this.value)"></div>` : ''}
-        <div class="field"><label>Moisture (%) — dari alat ukur</label><input type="number" step="any" value="${s.moist??''}" oninput="onSiloNumberInput(${s.id},'moist',this.value)"></div>
+        <div class="field"><label>Berat Sampel (g)</label>${stepperInputHtml(`silo_${s.id}_sampel`,s.sampel,`onSiloNumberInput(${s.id},'sampel',this.value)`)}</div>
+        <div class="field"><label>Berat Nu (g)</label>${stepperInputHtml(`silo_${s.id}_nu`,s.nu,`onSiloNumberInput(${s.id},'nu',this.value)`)}</div>
+        <div class="field"><label>Berat Np (g)</label>${stepperInputHtml(`silo_${s.id}_np`,s.np,`onSiloNumberInput(${s.id},'np',this.value)`)}</div>
+        <div class="field"><label>Berat Cangkang (g)</label>${stepperInputHtml(`silo_${s.id}_c`,s.c,`onSiloNumberInput(${s.id},'c',this.value)`)}</div>
+        <div class="field"><label>Berat BK/IP (g)</label>${stepperInputHtml(`silo_${s.id}_bk`,s.bk,`onSiloNumberInput(${s.id},'bk',this.value)`)}</div>` : ''}
+        <div class="field"><label>Moisture (%) — dari alat ukur</label><input type="number" step="0.1" inputmode="decimal" value="${s.moist??''}" oninput="onSiloNumberInput(${s.id},'moist',this.value)"></div>
       </div>
       <div class="result-card" style="margin-top:10px;" id="siloCalc_${s.id}">${siloCalcHtml(s)}</div>
     </div>`;
@@ -924,12 +1061,12 @@ function pcCardHtml(shift, line, c){
     </div>
     <div class="field-row" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
       <div class="field"><label>No. Press Cake</label><input type="text" value="${c.no||''}" oninput="pcTextInput(${c.id},'no',this.value)"></div>
-      <div class="field"><label>Berat Sampel (g)</label><input type="number" step="any" value="${c.sampel??''}" oninput="pcNumberInput(${c.id},'sampel',this.value)"></div>
-      <div class="field"><label>Berat Nu (g)</label><input type="number" step="any" value="${c.nu??''}" oninput="pcNumberInput(${c.id},'nu',this.value)"></div>
-      <div class="field"><label>Berat Np — Broken Nut (g)</label><input type="number" step="any" value="${c.np??''}" oninput="pcNumberInput(${c.id},'np',this.value)"></div>
-      <div class="field"><label>Berat Cangkang / C (g)</label><input type="number" step="any" value="${c.c??''}" oninput="pcNumberInput(${c.id},'c',this.value)"></div>
-      <div class="field"><label>Berat Ku (g)</label><input type="number" step="any" value="${c.ku??''}" oninput="pcNumberInput(${c.id},'ku',this.value)"></div>
-      <div class="field"><label>Berat Kp — Broken Kernel (g)</label><input type="number" step="any" value="${c.kp??''}" oninput="pcNumberInput(${c.id},'kp',this.value)"></div>
+      <div class="field"><label>Berat Sampel (g)</label><input type="number" step="any" inputmode="decimal" value="${c.sampel??''}" oninput="pcNumberInput(${c.id},'sampel',this.value)"></div>
+      <div class="field"><label>Berat Nu (g)</label><input type="number" step="any" inputmode="decimal" value="${c.nu??''}" oninput="pcNumberInput(${c.id},'nu',this.value)"></div>
+      <div class="field"><label>Berat Np — Broken Nut (g)</label><input type="number" step="any" inputmode="decimal" value="${c.np??''}" oninput="pcNumberInput(${c.id},'np',this.value)"></div>
+      <div class="field"><label>Berat Cangkang / C (g)</label><input type="number" step="any" inputmode="decimal" value="${c.c??''}" oninput="pcNumberInput(${c.id},'c',this.value)"></div>
+      <div class="field"><label>Berat Ku (g)</label><input type="number" step="any" inputmode="decimal" value="${c.ku??''}" oninput="pcNumberInput(${c.id},'ku',this.value)"></div>
+      <div class="field"><label>Berat Kp — Broken Kernel (g)</label><input type="number" step="any" inputmode="decimal" value="${c.kp??''}" oninput="pcNumberInput(${c.id},'kp',this.value)"></div>
     </div>
     <div class="result-card" style="margin-top:10px;" id="pcCalc_${c.id}">${pcCalcHtml(c)}</div>
   </div>`;
@@ -1025,6 +1162,64 @@ function pcCompute(c){
     brokenNutVsSample: sumExact(c.np||0)/c.sampel*100,
     brokenKernelVsSample: sumExact(c.kp||0)/c.sampel*100
   };
+}
+
+/* ===================================================================
+   FORMULA AUDIT
+=================================================================== */
+function approxEqual(actual, expected, tolerance){
+  return Number.isFinite(actual) && Math.abs(actual - expected) <= (tolerance || 0.000001);
+}
+
+function formulaCheck(name, expression, actual, expected, detail){
+  const valid = approxEqual(actual, expected);
+  return {name, expression, valid, detail: `${detail} Hasil kode: ${exact(actual)} · Acuan: ${exact(expected)}`};
+}
+
+function getFormulaChecks(){
+  const ripple = POINTS.ripple.compute({sampel:100, nu:1, np:0.5, bk:11.5, unit:'uji'});
+  const inti = POINTS.intiBasah.compute({sampel:100, nu:2, np:1.5, c:3});
+  const clay = POINTS.claybath.compute({sampel:100, nu:1, np:1, ku:0.2, kp:0.1});
+  const ltds1 = POINTS.ltds1.compute({sampel:200, ip:0.2});
+  const ltds2 = POINTS.ltds2.compute({sampel:200, ip:0.8});
+  const cyclone = POINTS.fcyclone.compute({sampel1:100, ip1:0.5, sampel2:200, ip2:1});
+  const silo = {sampel:100, nu:2, np:1, c:3, bk:4, moist:6};
+  const siloDirt = sumExact(silo.nu/silo.sampel*100, silo.np/silo.sampel*100, silo.c/silo.sampel*100);
+  const cake = pcCompute({sampel:100, nu:40, np:10, c:20, ku:25, kp:5});
+  const sulfit = (2 * 0.0125 * 50 * 1000) / 20;
+  const ffa = (5 * 25.6 * 0.1035) / 4;
+
+  return [
+    formulaCheck('Ripple Mill — efisiensi', '100 − ((Nu ÷ sampel × 100) + (Np ÷ sampel × 100))', ripple.efisiensi, 98.5, 'Nu=1 g, Np=0.5 g, sampel=100 g.'),
+    formulaCheck('Ripple Mill — Broken Kernel', 'BK ÷ sampel × 100', ripple.bk, 11.5, 'BK=11.5 g, sampel=100 g.'),
+    formulaCheck('Inti Basah — total dirt', 'Σ(Nu, Np, C) ÷ sampel × 100', inti.totalDirt, 6.5, 'Nu=2 g, Np=1.5 g, C=3 g, sampel=100 g.'),
+    formulaCheck('S-Claybath — total losses', 'Σ(Nu×0.45, Np×0.55, Ku, Kp) ÷ sampel × 100', clay.totalLosses, 1.3, 'Nu=1 g, Np=1 g, Ku=0.2 g, Kp=0.1 g, sampel=100 g.'),
+    formulaCheck('LTDS I — losses', 'IP ÷ sampel × 100', ltds1.losses, 0.1, 'IP=0.2 g, sampel=200 g.'),
+    formulaCheck('LTDS II — losses', 'IP ÷ sampel × 100', ltds2.losses, 0.4, 'IP=0.8 g, sampel=200 g.'),
+    formulaCheck('F.Cyclone — line 1', 'IP line 1 ÷ sampel line 1 × 100', cyclone.line1, 0.5, 'IP1=0.5 g, sampel1=100 g.'),
+    formulaCheck('F.Cyclone — line 2', 'IP line 2 ÷ sampel line 2 × 100', cyclone.line2, 0.5, 'IP2=1 g, sampel2=200 g.'),
+    formulaCheck('Kernel Silo — dirt', 'Σ(Nu, Np, C) ÷ sampel × 100', siloDirt, 6, 'Nu=2 g, Np=1 g, C=3 g, sampel=100 g.'),
+    formulaCheck('Press Cake — total nut', 'Σ(Nu, Np, C, Ku, Kp) ÷ sampel × 100', cake.totalNutPct, 100, 'Total komponen=100 g, sampel=100 g.'),
+    formulaCheck('Sulfit — kadar ppm', 'Titrasi × 0.0125 × faktor × 1000 ÷ volume sampel', sulfit, 62.5, 'Titrasi=2, faktor=50, volume sampel=20.'),
+    formulaCheck('FFA — persen asam lemak', 'Titrasi × konstanta × normalitas ÷ berat sampel', ffa, 3.312, 'Titrasi=5, konstanta=25.6, normalitas=0.1035, sampel=4 g.')
+  ];
+}
+
+function runFormulaAudit(){
+  const checks = getFormulaChecks();
+  const valid = checks.filter(c => c.valid).length;
+  const invalid = checks.length - valid;
+  document.getElementById('formulaSummary').innerHTML = `
+    <div class="formula-stat"><span class="label">Total rumus diperiksa</span><span class="value">${checks.length}</span></div>
+    <div class="formula-stat"><span class="label">Valid</span><span class="value" style="color:var(--ok-ink);">${valid}</span></div>
+    <div class="formula-stat"><span class="label">Perlu ditinjau</span><span class="value" style="color:${invalid ? 'var(--danger-ink)' : 'var(--ok-ink)'};">${invalid}</span></div>`;
+  document.getElementById('formulaList').innerHTML = checks.map(c => `
+    <div class="formula-item ${c.valid?'':'fail'}">
+      <div class="formula-item-head"><span class="name">${c.name}</span>${badge(c.valid?'ok':'danger')}</div>
+      <div class="expression">${c.expression}</div>
+      <div class="detail">${c.detail}</div>
+    </div>`).join('');
+  document.getElementById('formulaCheckedAt').textContent = 'Diperiksa ' + new Date().toLocaleString('id-ID');
 }
 function copyPressCakeReport(){
   const text = document.getElementById('pcReportOutput').textContent;
@@ -1169,6 +1364,16 @@ function buildReport(){
   document.getElementById('reportOutput').textContent = text;
   document.getElementById('reportOutputWrap').style.display = 'block';
   document.getElementById('reportOutput').dataset.raw = text;
+}
+
+function sendReportToWhatsApp(){
+  if(!document.getElementById('reportOutput').textContent.trim()) buildReport();
+  const text = document.getElementById('reportOutput').textContent.trim();
+  const number = (document.getElementById('waNumber').value || '').replace(/[^0-9]/g,'');
+  const url = number
+    ? `https://wa.me/${number}?text=${encodeURIComponent(text)}`
+    : `https://wa.me/?text=${encodeURIComponent(text)}`;
+  window.open(url, '_blank', 'noopener');
 }
 
 function copyReport(){
@@ -1421,16 +1626,16 @@ function renderAcakBody(){
   const sampleFields = isFcyclone ? `
     <div class="field">
       <label>Berat Sampel Line 1 (g)</label>
-      <input type="number" step="any" id="acakSampel1" placeholder="cth. 120" value="120">
+      <input type="number" inputmode="decimal" step="any" id="acakSampel1" placeholder="cth. 120" value="120">
     </div>
     <div class="field">
       <label>Berat Sampel Line 2 (g)</label>
-      <input type="number" step="any" id="acakSampel2" placeholder="cth. 140" value="140">
+      <input type="number" inputmode="decimal" step="any" id="acakSampel2" placeholder="cth. 140" value="140">
     </div>
   ` : `
     <div class="field">
       <label>Berat Sampel (g)</label>
-      <input type="number" step="any" id="acakSampel" placeholder="cth. 100" value="100">
+      <input type="number" inputmode="decimal" step="any" id="acakSampel" placeholder="cth. 100" value="100">
     </div>
   `;
 
@@ -1488,10 +1693,12 @@ function initAcak(){
 function switchMenu(menu){
   document.getElementById('menuPadatan').style.display = menu==='padatan' ? 'block' : 'none';
   document.getElementById('menuLaporan').style.display = menu==='laporan' ? 'block' : 'none';
+  document.getElementById('menuRumus').style.display = menu==='rumus' ? 'block' : 'none';
   document.getElementById('menuAcak').style.display = menu==='acak' ? 'block' : 'none';
   document.getElementById('menuCairan').style.display = menu==='cairan' ? 'block' : 'none';
   document.getElementById('tabBtnPadatan').classList.toggle('active', menu==='padatan');
   document.getElementById('tabBtnLaporan').classList.toggle('active', menu==='laporan');
+  document.getElementById('tabBtnRumus').classList.toggle('active', menu==='rumus');
   document.getElementById('tabBtnAcak').classList.toggle('active', menu==='acak');
   document.getElementById('tabBtnCairan').classList.toggle('active', menu==='cairan');
   if(menu==='acak' && !state._acakInit){ initAcak(); state._acakInit = true; }
@@ -1499,10 +1706,11 @@ function switchMenu(menu){
 
 function initDefaults(){
   const today = new Date();
-  document.getElementById('sesiTanggal').value = today.toISOString().slice(0,10);
-  document.getElementById('sesiJam').value = String(today.getHours()).padStart(2,'0') + ':00';
+  if(!document.getElementById('sesiTanggal').value) document.getElementById('sesiTanggal').value = today.toISOString().slice(0,10);
+  if(!document.getElementById('sesiJam').value) document.getElementById('sesiJam').value = String(today.getHours()).padStart(2,'0') + ':00';
 }
 
+const restored = restoreDraft();
 renderPointTabs();
 renderPointBody();
 renderSessionChips();
@@ -1510,6 +1718,14 @@ renderManualFields();
 renderRecap();
 renderAudit();
 initDefaults();
+if(restored){
+  const savedAt = localStorage.getItem(DRAFT_KEY);
+  const draft = savedAt ? JSON.parse(savedAt) : null;
+  document.getElementById('sessionMeta').textContent = draft?.savedAt
+    ? 'Draft dipulihkan ' + new Date(draft.savedAt).toLocaleString('id-ID')
+    : 'Draft dipulihkan';
+}
+saveDraft();
 </script>
 </body>
 </html>
