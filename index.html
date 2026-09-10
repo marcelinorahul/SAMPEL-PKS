@@ -134,6 +134,12 @@
 
   .row-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;}
 
+  .toast-stack{position:fixed;right:18px;bottom:18px;z-index:20;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
+  .toast{background:var(--brand-dark);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:11px 14px;box-shadow:var(--shadow);font-size:13px;font-weight:600;animation:toast-in .2s ease-out,toast-out .25s ease-in 2.75s forwards;}
+  .toast::before{content:'✓';display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-right:7px;border-radius:50%;background:var(--ok-bg);color:var(--ok-ink);font-size:12px;font-weight:700;}
+  @keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes toast-out{to{opacity:0;transform:translateY(8px)}}
+
   /* ---------- session summary ---------- */
   .session-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr));gap:10px;min-width:0;}
   .chip{
@@ -211,6 +217,8 @@
     .copy-row .btn{flex:1 1 140px;}
     .row-actions .btn{max-width:100%;}
     .formula-item-head{flex-wrap:wrap;}
+    .toast-stack{right:10px;bottom:10px;left:10px;}
+    .toast{text-align:center;}
   }
 </style>
 </head>
@@ -443,6 +451,7 @@
 </div>
 
 <footer class="foot">Otomatisasi Laboratorium PKS — By : Rahul</footer>
+<div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="true"></div>
 
 <script>
 /* ===================================================================
@@ -603,6 +612,16 @@ function logAudit(field, oldVal, newVal){
   if(oldVal === newVal) return;
   state.audit.unshift({field, oldVal, newVal, time: new Date().toLocaleString('id-ID')});
   renderAudit();
+}
+
+function showToast(message){
+  const stack = document.getElementById('toastStack');
+  if(!stack) return;
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = message;
+  stack.appendChild(toast);
+  setTimeout(() => toast.remove(), 3100);
 }
 
 /* ===================================================================
@@ -893,6 +912,7 @@ function addToSession(key){
     state.session[key] = res;
   }
   renderSessionChips();
+  showToast(POINTS[key].label + ' berhasil ditambahkan ke Sesi Laporan 2 Jam.');
 }
 
 function valueOf(res, key){
@@ -1012,6 +1032,7 @@ function commitSilos(){
   logAudit('Kernel Silo (jumlah entri)', state.session.kernelSilo.length || null, committed.length);
   state.session.kernelSilo = committed;
   renderSessionChips();
+  showToast(committed.length + ' data Kernel Silo berhasil ditambahkan ke Sesi Laporan 2 Jam.');
 }
 
 /* ===================================================================
