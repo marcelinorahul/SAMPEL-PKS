@@ -87,6 +87,8 @@
   .field-row{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;min-width:0;}
   .field{display:flex;flex-direction:column;gap:5px;min-width:0;}
   .field label{font-size:12.5px;font-weight:600;color:var(--ink-muted);}
+  .field label.weight-label{color:var(--brand);font-weight:700;}
+  .field label.weight-label::before{content:'● ';font-size:9px;color:var(--accent);vertical-align:1px;}
   .field input, .field select{
     padding:10px 12px;border:1px solid var(--border);border-radius:10px;font-size:14.5px;
     background:#fff;color:var(--ink);
@@ -103,6 +105,9 @@
   .result-row:last-child{border-bottom:none;}
   .result-row .k{font-size:13px;color:var(--ink-muted);min-width:0;overflow-wrap:anywhere;}
   .result-row .v{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:15px;min-width:0;overflow-wrap:anywhere;text-align:right;}
+  .result-row.exact-row{display:none;}
+  .result-row.rounded-row{background:var(--brand-soft);border:1px solid var(--ok-line);border-radius:8px;margin:4px 0;padding:9px 10px;}
+  .result-row.rounded-row .k,.result-row.rounded-row .v{color:var(--brand-dark);font-weight:700;}
   .target-note{font-size:12px;color:var(--ink-muted);margin-top:10px;}
 
   .badge{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;font-size:12.5px;font-weight:700;border:1px solid;}
@@ -574,8 +579,8 @@ function compRow(label, v, suffix){
 function dualRow(label, v, suffix){
   suffix = suffix===undefined ? '%' : suffix;
   return `
-    <div class="result-row"><span class="k">${label} — nilai pasti</span><span class="v">${exact(v)}${(v===null?'':suffix)}</span></div>
-    <div class="result-row"><span class="k">${label} — dibulatkan (2 desimal)</span><span class="v">${fmt(v,suffix)}</span></div>`;
+    <div class="result-row exact-row"><span class="k">${label} — nilai pasti</span><span class="v">${exact(v)}${(v===null?'':suffix)}</span></div>
+    <div class="result-row rounded-row"><span class="k">${label} — hasil laporan (2 desimal)</span><span class="v">${fmt(v,suffix)}</span></div>`;
 }
 
 function badge(status){
@@ -796,7 +801,7 @@ function renderPointBody(){
 
   const inputsHtml = def.inputs.map(f => `
     <div class="field">
-      <label>${f.label}</label>
+      <label class="${f.id.startsWith('sampel') ? 'weight-label' : ''}">${f.label}</label>
       ${f.type==='text'
         ? `<input type="text" id="in_${key}_${f.id}" placeholder="${f.placeholder||''}" oninput="recompute('${key}')">`
         : stepperInputHtml(`in_${key}_${f.id}`, '', `recompute('${key}')`, f.placeholder)}
@@ -973,12 +978,12 @@ function renderSiloList(){
           </select>
         </div>
         ${isDirt ? `
-        <div class="field"><label>Berat Sampel (g)</label>${stepperInputHtml(`silo_${s.id}_sampel`,s.sampel,`onSiloNumberInput(${s.id},'sampel',this.value)`)}</div>
+        <div class="field"><label class="weight-label">Berat Sampel (g)</label>${stepperInputHtml(`silo_${s.id}_sampel`,s.sampel,`onSiloNumberInput(${s.id},'sampel',this.value)`)}</div>
         <div class="field"><label>Berat Nu (g)</label>${stepperInputHtml(`silo_${s.id}_nu`,s.nu,`onSiloNumberInput(${s.id},'nu',this.value)`)}</div>
         <div class="field"><label>Berat Np (g)</label>${stepperInputHtml(`silo_${s.id}_np`,s.np,`onSiloNumberInput(${s.id},'np',this.value)`)}</div>
         <div class="field"><label>Berat Cangkang (g)</label>${stepperInputHtml(`silo_${s.id}_c`,s.c,`onSiloNumberInput(${s.id},'c',this.value)`)}</div>
         <div class="field"><label>Berat BK/IP (g)</label>${stepperInputHtml(`silo_${s.id}_bk`,s.bk,`onSiloNumberInput(${s.id},'bk',this.value)`)}</div>` : ''}
-        <div class="field"><label>Moisture (%) — dari alat ukur</label><input type="number" step="0.1" inputmode="decimal" value="${s.moist??''}" oninput="onSiloNumberInput(${s.id},'moist',this.value)"></div>
+        <div class="field"><label>Moisture (%)</label><input type="number" step="0.1" inputmode="decimal" value="${s.moist??''}" oninput="onSiloNumberInput(${s.id},'moist',this.value)"></div>
       </div>
       <div class="result-card" style="margin-top:10px;" id="siloCalc_${s.id}">${siloCalcHtml(s)}</div>
     </div>`;
