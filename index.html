@@ -1326,12 +1326,33 @@ function runFormulaAudit(){
     </div>`).join('');
   document.getElementById('formulaCheckedAt').textContent = 'Diperiksa ' + new Date().toLocaleString('id-ID');
 }
+function copyText(text, successMessage){
+  const copied = () => showToast(successMessage);
+  if(navigator.clipboard && window.isSecureContext){
+    return navigator.clipboard.writeText(text).then(copied).catch(() => copyTextFallback(text, copied));
+  }
+  return Promise.resolve(copyTextFallback(text, copied));
+}
+function copyTextFallback(text, onSuccess){
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.focus();
+  area.select();
+  area.setSelectionRange(0, area.value.length);
+  let copied = false;
+  try { copied = document.execCommand('copy'); } catch (_) { copied = false; }
+  area.remove();
+  if(copied) onSuccess();
+  else alert('Gagal menyalin — salin manual dari kotak laporan.');
+  return copied;
+}
 function copyPressCakeReport(){
   const text = document.getElementById('pcReportOutput').textContent;
-  navigator.clipboard.writeText(text).then(()=>{
-    const btn = event.target; const old = btn.textContent;
-    btn.textContent = 'Tersalin ✓'; setTimeout(()=>btn.textContent = old, 1500);
-  });
+  copyText(text, 'Laporan Press Cake tersalin.');
 }
 
 /* ===================================================================
@@ -1487,12 +1508,7 @@ function sendReportToWhatsApp(){
 
 function copyReport(){
   const text = document.getElementById('reportOutput').textContent;
-  navigator.clipboard.writeText(text).then(()=>{
-    const btn = event.target;
-    const old = btn.textContent;
-    btn.textContent = 'Tersalin ✓';
-    setTimeout(()=>btn.textContent = old, 1500);
-  }).catch(()=>{ alert('Gagal menyalin — salin manual dari kotak laporan.'); });
+  copyText(text, 'Laporan 2 Jam tersalin.');
 }
 
 /* ===================================================================
@@ -1514,10 +1530,10 @@ function saveSessionToRecap(){
     rippleBroken: s.ripple ? s.ripple.bk : null
   };
   const hasAny = Object.values(entry).some(v => v!==null && typeof v!=='string');
-  if(!hasAny){ alert('Sesi ini belum punya nilai padatan untuk direkap.'); return; }
+  if(!hasAny){ showToast('Sesi ini belum punya nilai padatan untuk direkap.'); return; }
   state.history.push(entry);
   renderRecap();
-  alert('Sesi tersimpan ke rekap harian (' + state.history.length + ' sesi tercatat hari ini).');
+  showToast('Sesi tersimpan ke rekap harian (' + state.history.length + ' sesi tercatat hari ini).');
 }
 
 function avg(arr){
@@ -1583,10 +1599,7 @@ function buildRecapText(rows){
 function copyRecap(){
   const box = document.querySelectorAll('.report-box');
   const el = box[box.length-1];
-  navigator.clipboard.writeText(el.textContent).then(()=>{
-    const btn = event.target; const old = btn.textContent;
-    btn.textContent = 'Tersalin ✓'; setTimeout(()=>btn.textContent=old,1500);
-  });
+  copyText(el.textContent, 'Rekap tersalin.');
 }
 
 function resetSession(){
@@ -1598,6 +1611,7 @@ function resetSession(){
   document.getElementById('noteField').value = '';
   document.getElementById('reportOutputWrap').style.display = 'none';
   if(state.activePoint === 'kernelSilo') renderSiloList();
+  showToast('Sesi baru siap digunakan.');
 }
 
 /* ===================================================================
@@ -1810,7 +1824,15 @@ function runAcak(){
       <div class="target-note">Target: Dirt 6.50%–7.00% · Moisture ≤ 7.00%</div>`;
   } else {
     res = def.compute(gen);
-    document.getElementById('acakResult').innerHTML = def.render(res);
+    if(key === 'ltds1' || key === 'ltds2'){
+      document.getElementById('acakResult').innerHTML = `
+        <div class="result-row"><span class="k">Berat Sampel</span><span class="v">${fmt(gen.sampel,' g')}</span></div>
+        <div class="result-row"><span class="k">Berat IP</span><span class="v">${fmt(gen.ip,' g')}</span></div>
+        <div class="usb-formula">Losses = Berat IP ÷ Berat Sampel × 100 = ${fmt(res.losses,'%')}</div>
+        ${def.render(res)}`;
+    } else {
+      document.getElementById('acakResult').innerHTML = def.render(res);
+    }
   }
 
   const usedWrap = document.getElementById('acakInputsUsed');
@@ -1885,7 +1907,7 @@ function buildUsbReport(){
 }
 function copyUsbReport(){
   const text = document.getElementById('usbReportOutput').textContent;
-  navigator.clipboard.writeText(text).then(()=>showToast('Laporan USB/FLEB tersalin.'));
+  copyText(text, 'Laporan USB/FLEB tersalin.');
 }
 function sendUsbReportToWhatsApp(){
   if(!document.getElementById('usbReportOutput').textContent.trim()) buildUsbReport();
