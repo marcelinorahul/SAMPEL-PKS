@@ -162,6 +162,15 @@
     font-family:'JetBrains Mono',monospace;font-size:12.8px;line-height:1.65;white-space:pre-wrap;
     overflow-x:auto;max-width:100%;overflow-wrap:anywhere;
   }
+  .usb-panel{border-top:4px solid var(--accent);}
+  .usb-stage{border:1px solid var(--border);border-radius:14px;padding:15px;background:#fff;}
+  .usb-stage h3{font-size:15px;margin-bottom:12px;}
+  .usb-stage-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:16px;align-items:start;}
+  .usb-results{background:#FFF8EA;border-color:#EBCF99;}
+  .usb-results .result-row.rounded-row{background:#FCEBC8;border-color:#EBCF99;}
+  .usb-formula{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-muted);margin-top:10px;line-height:1.55;}
+  .exact-result{margin-top:8px;color:var(--brand-dark);font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:700;}
+  @media(max-width:820px){.usb-stage-grid{grid-template-columns:1fr;}}
   .copy-row{display:flex;justify-content:flex-end;gap:8px;margin-top:10px;}
 
   table.recap{width:100%;border-collapse:collapse;font-size:13.5px;}
@@ -237,8 +246,8 @@
       <button class="top-tab active" id="tabBtnPadatan" onclick="switchMenu('padatan')">Padatan</button>
       <button class="top-tab" id="tabBtnLaporan" onclick="switchMenu('laporan')">Laporan</button>
       <button class="top-tab" id="tabBtnRumus" onclick="switchMenu('rumus')">Rumus</button>
-      <button class="top-tab" id="tabBtnAcak" onclick="switchMenu('acak')">Acak<span class="soon"></span></button>
       <button class="top-tab" id="tabBtnCairan" onclick="switchMenu('cairan')">Cairan<span class="soon">sulfit &amp; FFA</span></button>
+      <button class="top-tab" id="tabBtnUsb" onclick="switchMenu('usb')">USB/FLEB</button>
     </div>
   </div>
 </header>
@@ -259,6 +268,52 @@
       <div id="pointBody"></div>
     </div>
 
+  </section>
+
+  <!-- =================== USB / FLEB =================== -->
+  <section id="menuUsb" style="display:none;">
+    <div class="panel usb-panel">
+      <div class="panel-head">
+        <h2>Perhitungan USB dan FLEB</h2>
+        <span class="hint">Jangkos / janjangan kosong dan brondolan dihitung terpisah dari laporan lain</span>
+      </div>
+      <div class="field-row" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:18px;">
+        <div class="field"><label>Rebusan</label><select id="usbRebusan"><option value="1">No. 1</option><option value="2">No. 2</option></select></div>
+        <div class="field"><label>Lori ke-</label><input type="number" inputmode="numeric" min="1" step="1" id="usbLori" placeholder="cth. 67"></div>
+      </div>
+      <div class="usb-stage-grid">
+        <div class="usb-stage">
+          <h3>Sebelum bunch crusher</h3>
+          <div class="field-row" style="grid-template-columns:repeat(auto-fit,minmax(145px,1fr));">
+            <div class="field"><label>Jumlah jenjangan</label><input type="number" step="any" min="0" id="usbSebelumJanjang" oninput="calcUsbStage('sebelum')"></div>
+            <div class="field"><label>USB / jangkos kosong</label><input type="number" step="any" min="0" id="usbSebelumCount" oninput="calcUsbStage('sebelum')"></div>
+            <div class="field"><label>Brondolan (g)</label><input type="number" step="any" min="0" id="usbSebelumBrondolan" oninput="calcUsbStage('sebelum')"></div>
+            <div class="field"><label>Berat jenjangan (g)</label><input type="number" step="any" min="0" id="usbSebelumBerat" oninput="calcUsbStage('sebelum')"></div>
+            <div class="field"><label>HB (%)</label><input type="number" step="any" min="0" id="usbSebelumHb" oninput="calcUsbStage('sebelum')"></div>
+          </div>
+          <div class="result-card usb-results" style="margin-top:14px;" id="usbSebelumResult"></div>
+        </div>
+        <div class="usb-stage">
+          <h3>Setelah bunch crusher</h3>
+          <div class="field-row" style="grid-template-columns:repeat(auto-fit,minmax(145px,1fr));">
+            <div class="field"><label>Jumlah jenjangan</label><input type="number" step="any" min="0" id="usbSetelahJanjang" oninput="calcUsbStage('setelah')"></div>
+            <div class="field"><label>USB / jangkos kosong</label><input type="number" step="any" min="0" id="usbSetelahCount" oninput="calcUsbStage('setelah')"></div>
+            <div class="field"><label>Brondolan (g)</label><input type="number" step="any" min="0" id="usbSetelahBrondolan" oninput="calcUsbStage('setelah')"></div>
+            <div class="field"><label>Berat jenjangan (g)</label><input type="number" step="any" min="0" id="usbSetelahBerat" oninput="calcUsbStage('setelah')"></div>
+            <div class="field"><label>HB (%)</label><input type="number" step="any" min="0" id="usbSetelahHb" oninput="calcUsbStage('setelah')"></div>
+          </div>
+          <div class="result-card usb-results" style="margin-top:14px;" id="usbSetelahResult"></div>
+        </div>
+      </div>
+      <div class="row-actions">
+        <button class="btn primary" onclick="buildUsbReport()">Buat Laporan USB/FLEB</button>
+        <button class="btn ghost" onclick="resetUsb()">Reset USB/FLEB</button>
+      </div>
+      <div id="usbReportWrap" style="margin-top:16px;display:none;">
+        <div class="report-box" id="usbReportOutput"></div>
+        <div class="copy-row"><button class="btn ghost small" onclick="copyUsbReport()">Salin Laporan</button><button class="btn primary small" onclick="sendUsbReportToWhatsApp()">Kirim ke WA</button></div>
+      </div>
+    </div>
   </section>
 
   <!-- =================== LAPORAN (dipisah dari kalkulator biar tidak mengganggu input) =================== -->
@@ -362,6 +417,7 @@
       <div class="formula-list" id="formulaList"></div>
       <div class="row-actions">
         <button class="btn primary" onclick="runFormulaAudit()">Periksa Semua Rumus</button>
+        <button class="btn ghost" onclick="switchMenu('acak')">Buka Alat Latihan Acak</button>
       </div>
     </div>
   </section>
@@ -410,6 +466,7 @@
         <div class="result-card">
           <div class="result-row"><span class="k">Kadar Sulfit</span><span class="v" id="sulfitHasil">—</span></div>
           <div class="target-note" id="sulfitBreakdown">Isi volume titrasi untuk melihat hasil.</div>
+          <div class="exact-result" id="sulfitDetail">Hasil akhir detail: —</div>
         </div>
       </div>
     </div>
@@ -441,6 +498,7 @@
         <div class="result-card">
           <div class="result-row"><span class="k">%FFA</span><span class="v" id="ffaHasil">—</span></div>
           <div class="target-note" id="ffaBreakdown">Isi volume titrasi dan berat sampel untuk melihat hasil.</div>
+          <div class="exact-result" id="ffaDetail">Hasil akhir detail: —</div>
         </div>
       </div>
     </div>
@@ -1562,10 +1620,12 @@ function calcSulfit(){
   const pembagi = n(document.getElementById('sulfitPembagi').value) ?? 20;
   const out = document.getElementById('sulfitHasil');
   const bd = document.getElementById('sulfitBreakdown');
-  if(v===null || !pembagi){ out.textContent = '—'; bd.textContent = 'Isi volume titrasi untuk melihat hasil.'; return; }
+  const detail = document.getElementById('sulfitDetail');
+  if(v===null || !pembagi){ out.textContent = '—'; bd.textContent = 'Isi volume titrasi untuk melihat hasil.'; detail.textContent = 'Hasil akhir detail: —'; return; }
   const hasil = (v * 0.0125 * faktor * 1000) / pembagi;
   out.textContent = fmt(hasil,' ppm');
   bd.textContent = `${v} × 0.0125 × ${faktor} × 1000 ÷ ${pembagi} = ${fmt(hasil)} ppm`;
+  detail.textContent = `Hasil akhir detail: ${hasil.toFixed(6).replace('.',',')} ppm`;
 }
 
 function calcFFA(){
@@ -1575,10 +1635,12 @@ function calcFFA(){
   const sampel = n(document.getElementById('ffaSampel').value);
   const out = document.getElementById('ffaHasil');
   const bd = document.getElementById('ffaBreakdown');
-  if(titrasi===null || !sampel){ out.textContent = '—'; bd.textContent = 'Isi volume titrasi dan berat sampel untuk melihat hasil.'; return; }
+  const detail = document.getElementById('ffaDetail');
+  if(titrasi===null || !sampel){ out.textContent = '—'; bd.textContent = 'Isi volume titrasi dan berat sampel untuk melihat hasil.'; detail.textContent = 'Hasil akhir detail: —'; return; }
   const hasil = (titrasi * konstanta * normalitas) / sampel;
   out.textContent = fmt(hasil,'%');
   bd.textContent = `${titrasi} × ${konstanta} × ${normalitas} ÷ ${sampel} = ${fmt(hasil)}%`;
+  detail.textContent = `Hasil akhir detail: ${hasil.toFixed(6).replace('.',',')}%`;
 }
 
 /* ===================================================================
@@ -1587,7 +1649,7 @@ function calcFFA(){
    tersambung ke Sesi Laporan / Rekap / Audit Trail (sesuai catatan di UI).
 =================================================================== */
 let acakActivePoint = 'ripple';
-const ACAK_ORDER = ['ripple','intiBasah','claybath','ltds1','ltds2','fcyclone'];
+const ACAK_ORDER = ['ripple','intiBasah','claybath','ltds1','ltds2','fcyclone','kernelSilo'];
 
 function rand(min,max){ return Math.random()*(max-min)+min; }
 
@@ -1646,12 +1708,26 @@ const ACAK_GENERATORS = {
       sampel2,
       ip2: r2(line2Pct * sampel2 / 100)
     };
+  },
+  kernelSilo(sampel){
+    const dirtPct = rand(6.55, 6.95);
+    const nuShare = rand(0.25, 0.40);
+    const npShare = rand(0.15, 0.30);
+    const cShare = 1 - nuShare - npShare;
+    return {
+      sampel,
+      nu: r2(dirtPct * nuShare * sampel / 100),
+      np: r2(dirtPct * npShare * sampel / 100),
+      c: r2(dirtPct * cShare * sampel / 100),
+      bk: r2(rand(0.50, 5.00) * sampel / 100),
+      moist: r2(rand(4.50, 6.95))
+    };
   }
 };
 
 const ACAK_INPUT_LABELS = {
   unit:'Unit', sampel:'Berat Sampel (g)', sampel1:'Berat Sampel Line 1 (g)', sampel2:'Berat Sampel Line 2 (g)',
-  nu:'Berat Nu (g)', np:'Berat Np (g)', bk:'Berat BK (g)', c:'Berat Cangkang (g)', ku:'Berat Ku (g)', kp:'Berat Kp (g)', ip:'Berat IP (g)', ip1:'Berat IP Line 1 (g)', ip2:'Berat IP Line 2 (g)'
+  nu:'Berat Nu (g)', np:'Berat Np (g)', bk:'Berat BK (g)', c:'Berat Cangkang (g)', ku:'Berat Ku (g)', kp:'Berat Kp (g)', ip:'Berat IP (g)', ip1:'Berat IP Line 1 (g)', ip2:'Berat IP Line 2 (g)', moist:'Moisture (%)'
 };
 
 function renderAcakTabs(){
@@ -1721,8 +1797,21 @@ function runAcak(){
     gen = ACAK_GENERATORS[key](sampel);
   }
 
-  const res = def.compute(gen);
-  document.getElementById('acakResult').innerHTML = def.render(res);
+  let res;
+  if(key === 'kernelSilo'){
+    const dirt = sumExact(gen.nu, gen.np, gen.c) / gen.sampel * 100;
+    const dirtStatus = dirt <= 7 ? 'ok' : 'warn';
+    const moistStatus = gen.moist <= 7 ? 'ok' : 'warn';
+    res = {dirt, dirtStatus, moistStatus};
+    document.getElementById('acakResult').innerHTML = `
+      ${dualRow('Total Dirt Content', dirt)} ${badge(dirtStatus)}
+      ${compRow('%BK', gen.bk/gen.sampel*100)}
+      <div class="result-row"><span class="k">Moisture</span><span class="v">${fmt(gen.moist,'%')}</span> ${badge(moistStatus)}</div>
+      <div class="target-note">Target: Dirt 6.50%–7.00% · Moisture ≤ 7.00%</div>`;
+  } else {
+    res = def.compute(gen);
+    document.getElementById('acakResult').innerHTML = def.render(res);
+  }
 
   const usedWrap = document.getElementById('acakInputsUsed');
   const rows = Object.entries(gen)
@@ -1739,6 +1828,78 @@ function initAcak(){
 }
 
 /* ===================================================================
+   USB / FLEB
+=================================================================== */
+function usbNumber(id){ return n(document.getElementById(id).value); }
+function usbFormat(value){
+  if(value===null || value===undefined || !Number.isFinite(value)) return '-';
+  return String(Math.round(value*100)/100).replace(/\.0+$|(?<=\.\d)0+$/,'');
+}
+function usbStageValues(stage){
+  return {
+    janjang: usbNumber('usb'+stage[0].toUpperCase()+stage.slice(1)+'Janjang'),
+    count: usbNumber('usb'+stage[0].toUpperCase()+stage.slice(1)+'Count'),
+    brondolan: usbNumber('usb'+stage[0].toUpperCase()+stage.slice(1)+'Brondolan'),
+    berat: usbNumber('usb'+stage[0].toUpperCase()+stage.slice(1)+'Berat'),
+    hb: usbNumber('usb'+stage[0].toUpperCase()+stage.slice(1)+'Hb')
+  };
+}
+function calcUsbStage(stage){
+  const v = usbStageValues(stage);
+  const result = document.getElementById('usb'+stage[0].toUpperCase()+stage.slice(1)+'Result');
+  const usbPct = v.janjang && v.count!==null ? v.count/v.janjang*100 : null;
+  const fleb = v.janjang && v.count!==null && v.brondolan!==null && v.berat
+    ? (v.brondolan*v.count)/(v.berat*v.janjang)*100 : null;
+  result.innerHTML = `
+    <div class="result-row rounded-row"><span class="k">USB</span><span class="v">${usbFormat(usbPct)}%</span></div>
+    <div class="result-row"><span class="k">HB</span><span class="v">${usbFormat(v.hb)}%</span></div>
+    <div class="result-row rounded-row"><span class="k">FLEB</span><span class="v">${usbFormat(fleb)}%</span></div>
+    <div class="usb-formula">FLEB = (brondolan × USB) : (berat jenjangan × jumlah jenjangan) × 100</div>`;
+  return {usbPct, fleb, hb:v.hb};
+}
+function usbStageLabel(stage){ return stage === 'sebelum' ? 'Sebelum bunch crusher' : 'Setelah bunch crusher'; }
+function buildUsbReport(){
+  const sebelum = calcUsbStage('sebelum');
+  const setelah = calcUsbStage('setelah');
+  const rebusan = document.getElementById('usbRebusan').value;
+  const lori = document.getElementById('usbLori').value || '-';
+  const lines = [
+    'PERHITUNGAN USB DAN FLEB',
+    '',
+    usbStageLabel('sebelum'),
+    `USB. : ${usbFormat(sebelum.usbPct)}%`,
+    `HB.  : ${usbFormat(sebelum.hb)}%`,
+    `FLEB : ${usbFormat(sebelum.fleb)}%`,
+    '',
+    usbStageLabel('setelah'),
+    `USB. : ${usbFormat(setelah.usbPct)}%`,
+    `HB.  : ${usbFormat(setelah.hb)}%`,
+    `FLEB : ${usbFormat(setelah.fleb)}%`,
+    '',
+    `Rebusan No.${rebusan}`,
+    `Lori ke-${lori}`
+  ];
+  const text = lines.join('\n');
+  document.getElementById('usbReportOutput').textContent = text;
+  document.getElementById('usbReportWrap').style.display = 'block';
+}
+function copyUsbReport(){
+  const text = document.getElementById('usbReportOutput').textContent;
+  navigator.clipboard.writeText(text).then(()=>showToast('Laporan USB/FLEB tersalin.'));
+}
+function sendUsbReportToWhatsApp(){
+  if(!document.getElementById('usbReportOutput').textContent.trim()) buildUsbReport();
+  const text = document.getElementById('usbReportOutput').textContent.trim();
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+}
+function resetUsb(){
+  ['usbLori','usbSebelumJanjang','usbSebelumCount','usbSebelumBrondolan','usbSebelumBerat','usbSebelumHb','usbSetelahJanjang','usbSetelahCount','usbSetelahBrondolan','usbSetelahBerat','usbSetelahHb'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('usbRebusan').value = '1';
+  calcUsbStage('sebelum'); calcUsbStage('setelah');
+  document.getElementById('usbReportWrap').style.display = 'none';
+}
+
+/* ===================================================================
    MENU SWITCH + INIT
 =================================================================== */
 function switchMenu(menu){
@@ -1747,11 +1908,12 @@ function switchMenu(menu){
   document.getElementById('menuRumus').style.display = menu==='rumus' ? 'block' : 'none';
   document.getElementById('menuAcak').style.display = menu==='acak' ? 'block' : 'none';
   document.getElementById('menuCairan').style.display = menu==='cairan' ? 'block' : 'none';
+  document.getElementById('menuUsb').style.display = menu==='usb' ? 'block' : 'none';
   document.getElementById('tabBtnPadatan').classList.toggle('active', menu==='padatan');
   document.getElementById('tabBtnLaporan').classList.toggle('active', menu==='laporan');
   document.getElementById('tabBtnRumus').classList.toggle('active', menu==='rumus');
-  document.getElementById('tabBtnAcak').classList.toggle('active', menu==='acak');
   document.getElementById('tabBtnCairan').classList.toggle('active', menu==='cairan');
+  document.getElementById('tabBtnUsb').classList.toggle('active', menu==='usb');
   if(menu==='acak' && !state._acakInit){ initAcak(); state._acakInit = true; }
 }
 
