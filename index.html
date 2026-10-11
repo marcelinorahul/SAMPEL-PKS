@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Lab QC PKS — Pelaporan Sampling</title>
+<title>Lab QC PKS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -300,6 +300,9 @@
   .formula-item .name{font-weight:700;font-size:13.5px;}
   .formula-item .expression{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--brand-dark);margin-top:5px;word-break:break-word;overflow-wrap:anywhere;}
   .formula-item .detail{font-size:12px;color:var(--ink-muted);margin-top:5px;}
+  .acak-report{margin-top:12px;padding:14px;border:1px solid var(--ok-line);border-left:4px solid var(--brand);border-radius:10px;background:#F2F8F5;overflow-x:auto;}
+  .acak-report h3{font-size:13.5px;margin:0 0 8px;}
+  .acak-report pre{margin:0;color:var(--brand-dark);font:600 12.5px/1.65 'JetBrains Mono',monospace;white-space:pre;}
 
   footer.foot{text-align:center;color:var(--ink-muted);font-size:12px;padding:20px 0 6px;}
 
@@ -568,7 +571,7 @@
 
     <div class="panel">
       <div class="liquid-note">
-        Modul lengkap analisa cairan (COT, CST, Sludge, Vacuum Dryer) menyusul. Dua kalkulator inti sudah aktif di bawah ini.
+        Modul lengkap analisa cairan (COT, CST, Sludge, Vacuum Dryer) menyusul. Kalkulator sulfit, FFA, dan analisa air tersedia di bawah ini.
       </div>
       <div class="panel-head">
         <h2>Kadar Sulfit — Boiler</h2>
@@ -625,6 +628,48 @@
           <div class="result-row"><span class="k">%FFA</span><span class="v" id="ffaHasil">—</span></div>
           <div class="target-note" id="ffaBreakdown">Isi volume titrasi dan berat sampel untuk melihat hasil.</div>
           <div class="exact-result" id="ffaDetail">Hasil akhir detail: —</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Analisa Air — M, P, H Alkalinity</h2>
+        <span class="hint">Rumus: Volume titrasi × 0,02 × Faktor pengenceran × 1000 ÷ Volume sampel titrasi</span>
+      </div>
+      <div class="calc-grid">
+        <div class="field-row" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
+          <div class="field">
+            <label>Volume titrasi M-Alkalinity (mL)</label>
+            <input type="number" inputmode="decimal" step="any" min="0" id="waterMTitration" oninput="calcWaterAnalysis()" placeholder="cth. 2.4">
+          </div>
+          <div class="field">
+            <label>Volume titrasi P-Alkalinity (mL)</label>
+            <input type="number" inputmode="decimal" step="any" min="0" id="waterPTitration" oninput="calcWaterAnalysis()" placeholder="cth. 1.2">
+          </div>
+          <div class="field">
+            <label>Volume titrasi H-Alkalinity (mL)</label>
+            <input type="number" inputmode="decimal" step="any" min="0" id="waterHTitration" oninput="calcWaterAnalysis()" placeholder="cth. 0.8">
+          </div>
+          <div class="field">
+            <label>Faktor pengenceran <span class="unit">default 50</span></label>
+            <input type="number" inputmode="decimal" step="any" min="0" id="waterFactor" value="50" oninput="calcWaterAnalysis()">
+          </div>
+          <div class="field">
+            <label>Volume sampel dititrasi (mL) <span class="unit">default 20</span></label>
+            <input type="number" inputmode="decimal" step="any" min="0" id="waterSampleVolume" value="20" oninput="calcWaterAnalysis()">
+          </div>
+        </div>
+        <div class="result-card">
+          <div class="result-row"><span class="k">M-Alkalinity</span><span class="v" id="waterMResult">—</span></div>
+          <div class="target-note" id="waterMBreakdown">Isi faktor pengenceran, volume sampel, dan titrasi M.</div>
+          <div class="exact-result" id="waterMDetail">Hasil akhir detail: —</div>
+          <div class="result-row"><span class="k">P-Alkalinity</span><span class="v" id="waterPResult">—</span></div>
+          <div class="target-note" id="waterPBreakdown">Isi faktor pengenceran, volume sampel, dan titrasi P.</div>
+          <div class="exact-result" id="waterPDetail">Hasil akhir detail: —</div>
+          <div class="result-row"><span class="k">H-Alkalinity</span><span class="v" id="waterHResult">—</span></div>
+          <div class="target-note" id="waterHBreakdown">Isi volume titrasi H untuk melihat hasil.</div>
+          <div class="exact-result" id="waterHDetail">Hasil akhir detail: —</div>
         </div>
       </div>
     </div>
@@ -2206,6 +2251,31 @@ function calcFFA(){
   detail.textContent = `Hasil akhir detail: ${hasil.toFixed(6).replace('.',',')}%`;
 }
 
+function calcWaterAnalysis(){
+  const factor=n(document.getElementById('waterFactor').value);
+  const sample=n(document.getElementById('waterSampleVolume').value);
+  const results=[
+    {key:'M',titration:n(document.getElementById('waterMTitration').value)},
+    {key:'P',titration:n(document.getElementById('waterPTitration').value)},
+    {key:'H',titration:n(document.getElementById('waterHTitration').value)}
+  ];
+  results.forEach(item=>{
+    const out=document.getElementById(`water${item.key}Result`);
+    const breakdown=document.getElementById(`water${item.key}Breakdown`);
+    const detail=document.getElementById(`water${item.key}Detail`);
+    if(item.titration===null || factor===null || factor<=0 || sample===null || sample<=0){
+      out.textContent='—';
+      breakdown.textContent=`Isi volume titrasi ${item.key}, faktor pengenceran, dan volume sampel.`;
+      detail.textContent='Hasil akhir detail: —';
+      return;
+    }
+    const value=item.titration*0.02*factor*1000/sample;
+    out.textContent=fmt(value,' mg/L');
+    breakdown.textContent=`${item.titration} × 0,02 × ${factor} × 1000 ÷ ${sample} = ${fmt(value)} mg/L`;
+    detail.textContent=`Hasil akhir detail: ${value.toFixed(6).replace('.',',')} mg/L`;
+  });
+}
+
 /* ===================================================================
    ACAK / RANDOM PICKER (latihan) — memakai ulang compute()/render() dari
    POINTS supaya hasilnya konsisten dengan kalkulator utama. Tidak
@@ -2352,7 +2422,76 @@ function renderAcakBody(){
     <div class="row-actions">
       <button class="btn primary" onclick="runAcak()">= Acak</button>
     </div>
-    <div class="result-card" id="acakInputsUsed" style="margin-top:12px;display:none;"></div>`;
+    <div class="result-card" id="acakInputsUsed" style="margin-top:12px;display:none;"></div>
+    <div class="acak-report" id="acakReportWrap" style="display:none;"><h3>Hasil format laporan</h3><pre id="acakReportOutput"></pre></div>`;
+}
+
+function acakNumber(value, decimals){
+  return Number(value).toFixed(decimals===undefined?2:decimals);
+}
+
+function acakReportPrecision(sample){
+  return Math.max(1,Math.min(6,Math.floor(Math.log10(10000/sample))+2));
+}
+
+function acakReportWeight(weight,sample){
+  const precision=acakReportPrecision(sample);
+  const rounded=Number(weight.toFixed(precision));
+  return {rounded,text:rounded.toFixed(precision).replace(/(\.\d*?[1-9])0+$/,'$1').replace(/\.0+$/,'')};
+}
+
+function acakReportPercent(weight,sample,factor){
+  return weight*(factor===undefined?1:factor)/sample*100;
+}
+
+function acakReportComponent(label,weight,sample,connector,factor){
+  const mass=acakReportWeight(weight,sample);
+  const percent=acakReportPercent(weight,sample,factor);
+  return `${label.padEnd(5)} ${mass.text.padStart(8)} / ${acakNumber(percent).padStart(5)} ${connector||''}`.trimEnd();
+}
+
+function buildAcakReport(key,gen,res){
+  const border='----------------------------------------------';
+  let lines=[];
+  if(key==='ripple'){
+    const totalNut=sumExact(acakReportPercent(gen.nu,gen.sampel),acakReportPercent(gen.np,gen.sampel));
+    lines=[`Ripple Mill     ${acakNumber(gen.sampel,1)}`,
+      acakReportComponent('Nu',gen.nu,gen.sampel,'\\'),
+      `${acakReportComponent('Np',gen.np,gen.sampel,'|')} ${acakNumber(totalNut)} (Efisiensi: ${acakNumber(100-totalNut)}%)`,
+      acakReportComponent('BK',gen.bk,gen.sampel)];
+  } else if(key==='intiBasah'){
+    const dirt=sumExact(...['nu','np','c'].map(field=>acakReportPercent(gen[field],gen.sampel)));
+    lines=[`Inti Basah      ${acakNumber(gen.sampel,1)}`,
+      acakReportComponent('Nu',gen.nu,gen.sampel,'\\'),
+      `${acakReportComponent('Np',gen.np,gen.sampel,'|')} ${acakNumber(dirt)}`,
+      acakReportComponent('C',gen.c,gen.sampel,'/')];
+  } else if(key==='kernelSilo'){
+    const dirt=sumExact(...['nu','np','c'].map(field=>acakReportPercent(gen[field],gen.sampel)));
+    lines=[`K. Silo         ${acakNumber(gen.sampel,1)}`,
+      acakReportComponent('Nu',gen.nu,gen.sampel,'\\'),
+      `${acakReportComponent('Np',gen.np,gen.sampel,'|')} ${acakNumber(dirt)}`,
+      acakReportComponent('C',gen.c,gen.sampel,'/'),
+      acakReportComponent('IP',gen.bk,gen.sampel),
+      `M               ${acakNumber(gen.moist)}`];
+  } else if(key==='claybath'){
+    const losses=sumExact(acakReportPercent(gen.nu,gen.sampel,0.45),acakReportPercent(gen.np,gen.sampel,0.55),acakReportPercent(gen.ku,gen.sampel),acakReportPercent(gen.kp,gen.sampel));
+    lines=[`S-Claybath      ${acakNumber(gen.sampel,1)}`,
+      acakReportComponent('Nu',gen.nu,gen.sampel,'\\',0.45),
+      `${acakReportComponent('Np',gen.np,gen.sampel,'|',0.55)} ${acakNumber(losses)}`,
+      acakReportComponent('Ku',gen.ku,gen.sampel,'|'),
+      acakReportComponent('Kp',gen.kp,gen.sampel,'/')];
+  } else if(key==='ltds1' || key==='ltds2'){
+    lines=[`${key==='ltds1'?'LTDS I':'LTDS II'}          ${acakNumber(gen.sampel,1)}`,
+      acakReportComponent('IP',gen.ip,gen.sampel,'/'),
+      `Losses          ${acakNumber(acakReportPercent(gen.ip,gen.sampel))}`];
+  } else if(key==='fcyclone'){
+    lines=['F.Cyclone',
+      `Line 1          ${acakNumber(gen.sampel1,1)}`,
+      acakReportComponent('IP L1',gen.ip1,gen.sampel1,'/'),
+      `Line 2          ${acakNumber(gen.sampel2,1)}`,
+      acakReportComponent('IP L2',gen.ip2,gen.sampel2,'/')];
+  }
+  return lines.length?[border,...lines,border].join('\n'):'';
 }
 
 function runAcak(){
@@ -2409,6 +2548,9 @@ function runAcak(){
     .join('');
   usedWrap.innerHTML = `<div class="target-note" style="margin-bottom:6px;">Berat komponen hasil acak (gram) — coba masukkan manual di tab Padatan untuk latihan:</div>${rows}`;
   usedWrap.style.display = 'block';
+  const report = buildAcakReport(key,gen,res);
+  document.getElementById('acakReportOutput').textContent = report;
+  document.getElementById('acakReportWrap').style.display = report ? 'block' : 'none';
 }
 
 function initAcak(){
