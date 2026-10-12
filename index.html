@@ -72,6 +72,9 @@
   .panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap;min-width:0;}
   .panel-head h2{font-size:17px;}
   .panel-head .hint{font-size:12.5px;color:var(--ink-muted);}
+  .smart-report-panel{border-top:4px solid var(--accent);}
+  .smart-report-input textarea{min-height:250px;font:13px/1.55 'JetBrains Mono',monospace;}
+  .smart-report-status{margin-top:10px;color:var(--ink-muted);font-size:12.5px;}
 
   /* ---------- point sub-tabs ---------- */
   .point-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:18px;scrollbar-width:thin;}
@@ -510,6 +513,22 @@
           <button class="btn ghost small" onclick="copyReport()">Salin Laporan</button>
           <button class="btn primary small" onclick="sendReportToWhatsApp()">Kirim ke WA</button>
         </div>
+      </div>
+    </div>
+
+    <div class="panel smart-report-panel">
+      <div class="panel-head">
+        <h2>Laporan Pintar</h2>
+        <span class="hint">Tempel laporan teks untuk mengisi rekap per 2 jam dan grafik</span>
+      </div>
+      <div class="field smart-report-input">
+        <label for="smartReportText">Teks laporan</label>
+        <textarea id="smartReportText" class="manual" rows="12" placeholder="Tempel laporan lengkap di sini, termasuk tanggal dan Laporan Jam ..."></textarea>
+      </div>
+      <div class="smart-report-status" id="smartReportStatus" aria-live="polite">Laporan akan dideteksi saat disimpan.</div>
+      <div class="row-actions">
+        <button class="btn primary" onclick="saveSmartReport()">Deteksi &amp; Simpan ke Rekap</button>
+        <button class="btn ghost" onclick="clearSmartReport()">Kosongkan</button>
       </div>
     </div>
 
@@ -1810,6 +1829,139 @@ function copyReport(){
   copyText(text, 'Laporan 2 Jam tersalin.');
 }
 
+function parseSmartReport(text){
+  const dateMatch = text.match(/(\d{1,2})\s*[-/]\s*(\d{1,2})\s*[-/]\s*(\d{4})/);
+  const timeMatch = text.match(/Laporan\s+Jam\s+(\d{1,2}):(\d{2})/i);
+  if(!dateMatch || !timeMatch) return {error:'Tanggal atau jam laporan tidak ditemukan. Sertakan format tanggal dan "Laporan Jam HH:MM".'};
+  const day = Number(dateMatch[1]), month = Number(dateMatch[2]), year = Number(dateMatch[3]);
+  const dateObject = new Date(year,month-1,day);
+  if(dateObject.getFullYear()!==year || dateObject.getMonth()!==month-1 || dateObject.getDate()!==day){
+    return {error:'Tanggal laporan tidak valid.'};
+  }
+  const hour = Number(timeMatch[1]), minute = Number(timeMatch[2]);
+  if(hour>24 || minute>59 || (hour===24 && minute!==0)) return {error:'Jam laporan tidak valid.'};
+
+  const manual = {};
+  const silos = [];
+  const metrics = {ltds1:null,ltds2:null,fc1:null,fc2:null,claybath:null,intiDirt:null,rippleEfficiency:null,rippleBroken:null};
+  let section = '', currentSilo = null, note = '', pressUnit = null, bunchPressUnit = null;
+  const numberFrom = value => {
+    const match = value.trim().match(/^[-+]?\d+(?:[.,]\d+)?/);
+    return match ? Number(match[0].replace(',','.')) : null;
+  };
+  const manualBySection = {
+    'sebelum vacum':{moist:'sebelumVacumMoist'},
+    'sesudah vacum':{ffa:'sesudahFfa',moist:'sesudahMoist',dirt:'sesudahDirt'},
+    'cot':{oil:'cotOil',emulsi:'cotEmulsi',moist:'cotMoist',sludge:'cotSludge',ffa:'cotFfa'},
+    'crude bunch press':{oil:'crudeOil',emulsi:'crudeEmulsi',moist:'crudeMoist',sludge:'crudeSludge'},
+    'cst 1':{oil:'cst1Oil',emulsi:'cst1Emulsi',moist:'cst1Moist',sludge:'cst1Sludge'},
+    'cst 2':{oil:'cst2Oil',emulsi:'cst2Emulsi',moist:'cst2Moist',sludge:'cst2Sludge'},
+    'temperatur':{cst1:'tempCst1','cst 1':'tempCst1',cst2:'tempCst2','cst 2':'tempCst2','juice tank':'tempJuice',cot:'tempCot'}
+  };
+  text.split(/\r?\n/).forEach(rawLine=>{
+    const line = rawLine.replace(/[*_]/g,'').trim();
+    if(!line) return;
+    const siloMatch = line.match(/^kernel\s*silo\s*(\d*)$/i);
+    if(siloMatch){
+      currentSilo = {no:siloMatch[1] || String(silos.length+1),dirt:null,moist:null,bk:null,nu:null,np:null,c:null};
+      silos.push(currentSilo);
+      section = 'kernel silo';
+      return;
+    }
+    const heading = line.toLowerCase().replace(/\s+/g,' ').trim();
+    if(manualBySection[heading]){ section=heading; currentSilo=null; return; }
+    if(heading.startsWith('pengiriman kernel')){ section='kernel production'; currentSilo=null; return; }
+    if(heading.startsWith('ripple mill')){ section='ripple'; currentSilo=null; return; }
+    const pair = line.match(/^(.+?)\s*:\s*(.*)$/);
+    if(!pair) return;
+    const label = pair[1].toLowerCase().replace(/[.:]/g,'').replace(/\s+/g,' ').trim();
+    const value = numberFrom(pair[2]);
+    if(/^note\b/.test(label)){ note=pair[2].trim(); return; }
+    if(/press beroperasi/.test(label)){
+      if(/bunch/.test(label)) bunchPressUnit=value;
+      else pressUnit=value;
+      return;
+    }
+    if(currentSilo){
+      if(label.startsWith('moist')) currentSilo.moist=value;
+      else if(label.startsWith('dirt')) currentSilo.dirt=value;
+      else if(label.startsWith('broken')) currentSilo.bk=value;
+      else if(label.startsWith('nut utuh')) currentSilo.nu=value;
+      else if(label.startsWith('nut pecah')) currentSilo.np=value;
+      else if(label.startsWith('cangkang')) currentSilo.c=value;
+      return;
+    }
+    if(section==='temperatur'){
+      const key=manualBySection.temperatur[label];
+      if(key){ if(value!==null) manual[key]=value; return; }
+    }
+    const sectionFields=manualBySection[section];
+    if(sectionFields && sectionFields[label]){ if(value!==null) manual[sectionFields[label]]=value; return; }
+    if(/^ltds\s*1/.test(label)) metrics.ltds1=value;
+    else if(/^ltds\s*2/.test(label)) metrics.ltds2=value;
+    else if(/^(f\s*\.\s*cyclone|f\s*cyclone)/.test(label)){
+      if(/line\s*2/.test(label)) metrics.fc2=value;
+      else if(/line\s*1/.test(label)) metrics.fc1=value;
+    }else if(/^w\s*s\s*clay/.test(label)) metrics.claybath=value;
+    else if(/^inti basah/.test(label)) metrics.intiDirt=value;
+    else if(/^efisiensi/.test(label) && section==='ripple') metrics.rippleEfficiency=value;
+    else if(/^broken/.test(label) && section==='ripple') metrics.rippleBroken=value;
+  });
+  const hasData=Object.keys(manual).length || silos.some(silo=>Object.values(silo).some(value=>typeof value==='number')) || Object.values(metrics).some(Number.isFinite);
+  if(!hasData) return {error:'Tidak ada nilai laporan yang dikenali. Pastikan label dan nilai dipisahkan dengan tanda titik dua (:).'};
+  const session=emptySession();
+  session.manual=manual;
+  session.kernelSilo=silos;
+  session.ltds1=Number.isFinite(metrics.ltds1)?{losses:metrics.ltds1}:null;
+  session.ltds2=Number.isFinite(metrics.ltds2)?{losses:metrics.ltds2}:null;
+  session.fcyclone={line1:Number.isFinite(metrics.fc1)?metrics.fc1:null,line2:Number.isFinite(metrics.fc2)?metrics.fc2:null};
+  session.claybath=Number.isFinite(metrics.claybath)?{totalLosses:metrics.claybath}:null;
+  session.intiBasah=Number.isFinite(metrics.intiDirt)?{totalDirt:metrics.intiDirt}:null;
+  session.ripple=Number.isFinite(metrics.rippleEfficiency)||Number.isFinite(metrics.rippleBroken)
+    ? {efisiensi:metrics.rippleEfficiency,bk:metrics.rippleBroken,unit:''}:null;
+  return {
+    date:`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`,
+    clock:`${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`,
+    manual,silos,metrics,session,note,pressUnit,bunchPressUnit
+  };
+}
+
+function saveSmartReport(){
+  const text=document.getElementById('smartReportText').value.trim();
+  const status=document.getElementById('smartReportStatus');
+  const parsed=parseSmartReport(text);
+  if(parsed.error){ status.textContent=parsed.error; status.style.color='var(--danger-ink)'; return; }
+  const now=new Date(), silos=parsed.silos;
+  const dirtSilos=silos.filter(silo=>Number.isFinite(silo.dirt));
+  const entry={
+    id:`${parsed.date}_${parsed.clock}_smart`,date:parsed.date,clock:parsed.clock,
+    time:now.toLocaleString('id-ID'),savedAt:now.toISOString(),source:'smart-report',reportText:text,
+    ltds1:parsed.metrics.ltds1,ltds2:parsed.metrics.ltds2,fc1:parsed.metrics.fc1,fc2:parsed.metrics.fc2,
+    claybath:parsed.metrics.claybath,intiDirt:parsed.metrics.intiDirt,
+    kernelMoist:avg(silos.map(silo=>silo.moist)),kernelDirt:avg(dirtSilos.map(silo=>silo.dirt)),
+    kernelNu:avg(dirtSilos.map(silo=>silo.nu)),kernelNp:avg(dirtSilos.map(silo=>silo.np)),kernelShell:avg(dirtSilos.map(silo=>silo.c)),
+    rippleEfficiency:parsed.metrics.rippleEfficiency,rippleBroken:parsed.metrics.rippleBroken,
+    ...parsed.manual,
+    note:parsed.note,bunkerGroup:'',pressUnit:parsed.pressUnit,bunchPressUnit:parsed.bunchPressUnit,session:parsed.session
+  };
+  const existingIndex=state.history.findIndex(item=>item.date===entry.date && item.clock===entry.clock);
+  if(existingIndex>=0){ entry.id=state.history[existingIndex].id; state.history[existingIndex]=entry; }
+  else state.history.push(entry);
+  recapFilterDate=entry.date;
+  renderRecap();
+  const saved=saveDraft();
+  status.textContent=`Terdeteksi ${Object.keys(parsed.manual).length} nilai proses, ${silos.length} silo, tanggal ${recapDateLabel(entry.date)} jam ${entry.clock}. ${existingIndex>=0?'Rekaman pada jam yang sama diperbarui.':'Rekaman disimpan.'}`;
+  status.style.color='var(--ok-ink)';
+  showToast(saved?'Laporan pintar tersimpan ke rekap harian.':'Laporan masuk ke rekap, tetapi penyimpanan browser gagal.');
+}
+
+function clearSmartReport(){
+  document.getElementById('smartReportText').value='';
+  const status=document.getElementById('smartReportStatus');
+  status.textContent='Laporan akan dideteksi saat disimpan.';
+  status.style.color='var(--ink-muted)';
+}
+
 /* ===================================================================
    DAILY RECAP
 =================================================================== */
@@ -1974,8 +2126,8 @@ function recapLegend(series){
   return `<div class="recap-legend">${series.map(item => {
     const target = item.targetMin!==undefined && item.targetMax!==undefined
       ? `${item.targetMin}–${item.targetMax}%`
-      : item.targetMin!==undefined ? `≥ ${item.targetMin}%` : `≤ ${item.targetMax}%`;
-    return `<span><i style="background:${item.color}"></i>${escapeHtml(item.label)} <span>(target ${target})</span></span>`;
+      : item.targetMin!==undefined ? `≥ ${item.targetMin}%` : item.targetMax!==undefined ? `≤ ${item.targetMax}%` : '';
+    return `<span><i style="background:${item.color}"></i>${escapeHtml(item.label)}${target?` <span>(target ${target})</span>`:''}</span>`;
   }).join('')}</div>`;
 }
 
@@ -2002,7 +2154,24 @@ function buildRecapContent(entries){
     ],range:{min:90,max:100}},
     {title:'Ripple Mill — broken kernel',series:[
       {key:'rippleBroken',label:'Broken Kernel',targetMin:11,targetMax:12.5,color:'#B8483E'}
-    ]}
+    ]},
+    {title:'Vacum & FFA',series:[
+      {key:'sesudahFfa',label:'FFA Sesudah Vacum',color:'#B8483E'},
+      {key:'sesudahMoist',label:'Moist Sesudah Vacum',color:'#3476A5'},
+      {key:'cotFfa',label:'FFA COT',color:'#D47725'}
+    ]},
+    {title:'Komposisi COT',series:[
+      {key:'cotOil',label:'Oil',color:'#16745C'},
+      {key:'cotEmulsi',label:'Emulsi',color:'#D47725'},
+      {key:'cotMoist',label:'Moist',color:'#3476A5'},
+      {key:'cotSludge',label:'Sludge',color:'#B8483E'}
+    ]},
+    {title:'Temperatur proses',series:[
+      {key:'tempCst1',label:'CST 1',color:'#16745C'},
+      {key:'tempCst2',label:'CST 2',color:'#D47725'},
+      {key:'tempJuice',label:'Juice Tank',color:'#3476A5'},
+      {key:'tempCot',label:'COT',color:'#B8483E'}
+    ],range:{min:60,max:110}}
   ];
   const kpis = [
     {label:'Rekaman 2 jam',value:entries.length,detail:'pada filter yang dipilih'},
@@ -2285,7 +2454,7 @@ let acakActivePoint = 'ripple';
 const ACAK_ORDER = ['ripple','intiBasah','claybath','ltds1','ltds2','fcyclone','kernelSilo'];
 
 function rand(min,max){ return Math.random()*(max-min)+min; }
-function randomInputWeight(grams){ return Number(grams.toFixed(4)); }
+function randomInputWeight(grams){ return Number(grams.toFixed(1)); }
 function componentWeights(totalPct, sample, options){
   const shellPct = rand(options.shellMin, Math.min(options.shellMax,totalPct-options.minimumNutPct));
   const remainingPct = totalPct-shellPct;
@@ -2301,8 +2470,8 @@ const ACAK_SAFE_NOTES = {
   ripple:'Rentang aman latihan: efisiensi 98.10–99.40% · BK 11.10–12.40%.',
   intiBasah:'Rentang aman latihan: total dirt 6.50–6.95%; Nu dan Np bervariasi, cangkang dominan sekitar 4.50–5.50% sampel.',
   claybath:'Rentang aman latihan: total losses 0.55–0.78% setelah faktor Nu ×0.45 dan Np ×0.55 dihitung.',
-  ltds1:'Rentang aman latihan: losses 0.07–0.09%.',
-  ltds2:'Rentang aman latihan: losses 0.37–0.42%.',
+  ltds1:'Target latihan: losses ≤ 0.10%; berat menyesuaikan ketelitian timbangan 0,1 g.',
+  ltds2:'Target latihan: losses ≤ 0.45%; berat menyesuaikan ketelitian timbangan 0,1 g.',
   fcyclone:'Rentang aman latihan: Line 1 dan Line 2 masing-masing 0.77–0.86%.',
   kernelSilo:'Rentang aman latihan: total dirt 6.50–6.95%, cangkang 4.50–5.50% sampel, moisture 5.20–6.80%.'
 };
@@ -2430,14 +2599,23 @@ function acakNumber(value, decimals){
   return Number(value).toFixed(decimals===undefined?2:decimals);
 }
 
-function acakReportPrecision(sample){
-  return Math.max(1,Math.min(6,Math.floor(Math.log10(10000/sample))+2));
+function acakReportWeight(weight){
+  const rounded=Number(weight.toFixed(1));
+  return {rounded,text:rounded.toFixed(1)};
 }
 
-function acakReportWeight(weight,sample){
-  const precision=acakReportPrecision(sample);
-  const rounded=Number(weight.toFixed(precision));
-  return {rounded,text:rounded.toFixed(precision).replace(/(\.\d*?[1-9])0+$/,'$1').replace(/\.0+$/,'')};
+function isAcakResultSafe(key,res,gen){
+  if(key==='ripple') return res.efisiensi>=98.1 && res.efisiensi<=99.4 && res.bk>=11.1 && res.bk<=12.4;
+  if(key==='intiBasah') return res.totalDirt>=6.5 && res.totalDirt<=6.95;
+  if(key==='claybath') return res.totalLosses>=0.55 && res.totalLosses<=0.78;
+  if(key==='ltds1') return res.losses>=0.07 && res.losses<=0.1;
+  if(key==='ltds2') return res.losses>=0.37 && res.losses<=0.45;
+  if(key==='fcyclone') return res.line1>=0.77 && res.line1<=0.86 && res.line2>=0.77 && res.line2<=0.86;
+  if(key==='kernelSilo'){
+    const dirt=sumExact(gen.nu,gen.np,gen.c)/gen.sampel*100;
+    return dirt>=6.5 && dirt<=6.95 && gen.moist<=7;
+  }
+  return false;
 }
 
 function acakReportPercent(weight,sample,factor){
@@ -2497,7 +2675,7 @@ function buildAcakReport(key,gen,res){
 function runAcak(){
   const key = acakActivePoint;
   const def = POINTS[key];
-  let gen;
+  let generate;
 
   if(key === 'fcyclone'){
     const sampel1 = n(document.getElementById('acakSampel1').value);
@@ -2506,34 +2684,37 @@ function runAcak(){
       alert('Isi berat sampel Line 1 dan Line 2 (gram) dulu, masing-masing harus lebih dari 0.');
       return;
     }
-    gen = ACAK_GENERATORS[key](sampel1, sampel2);
+    generate = () => ACAK_GENERATORS[key](sampel1, sampel2);
   } else {
     const sampelEl = document.getElementById('acakSampel');
     const sampel = n(sampelEl.value);
     if(!sampel || sampel <= 0){ alert('Isi berat sampel (gram) dulu, harus lebih dari 0.'); return; }
-    gen = ACAK_GENERATORS[key](sampel);
+    generate = () => ACAK_GENERATORS[key](sampel);
   }
 
-  let res;
+  let gen, res;
+  for(let attempt=0;attempt<100;attempt++){
+    gen=generate();
+    if(key==='kernelSilo'){
+      const dirt=sumExact(gen.nu,gen.np,gen.c)/gen.sampel*100;
+      res={dirt,dirtStatus:dirt<=7?'ok':'warn',moistStatus:gen.moist<=7?'ok':'warn'};
+    }else res=def.compute(gen);
+    if(isAcakResultSafe(key,res,gen)) break;
+  }
   if(key === 'kernelSilo'){
-    const dirt = sumExact(gen.nu, gen.np, gen.c) / gen.sampel * 100;
-    const dirtStatus = dirt <= 7 ? 'ok' : 'warn';
-    const moistStatus = gen.moist <= 7 ? 'ok' : 'warn';
-    res = {dirt, dirtStatus, moistStatus};
     document.getElementById('acakResult').innerHTML = `
       ${compRow('Nut Utuh (Nu)',gen.nu/gen.sampel*100)}
       ${compRow('Nut Pecah (Np)',gen.np/gen.sampel*100)}
       ${compRow('Cangkang',gen.c/gen.sampel*100)}
-      ${dualRow('Total Dirt Content', dirt)} ${badge(dirtStatus)}
+      ${dualRow('Total Dirt Content', res.dirt)} ${badge(res.dirtStatus)}
       ${compRow('%BK', gen.bk/gen.sampel*100)}
-      <div class="result-row"><span class="k">Moisture</span><span class="v">${fmt(gen.moist,'%')}</span> ${badge(moistStatus)}</div>
+      <div class="result-row"><span class="k">Moisture</span><span class="v">${fmt(gen.moist,'%')}</span> ${badge(res.moistStatus)}</div>
       <div class="target-note">Target latihan: Dirt 6.50%–7.00% · Moisture ≤ 7.00%</div>`;
   } else {
-    res = def.compute(gen);
     if(key === 'ltds1' || key === 'ltds2'){
       document.getElementById('acakResult').innerHTML = `
-        <div class="result-row"><span class="k">Berat Sampel</span><span class="v">${fmt(gen.sampel,' g')}</span></div>
-        <div class="result-row"><span class="k">Berat IP</span><span class="v">${fmt(gen.ip,' g')}</span></div>
+        <div class="result-row"><span class="k">Berat Sampel</span><span class="v">${gen.sampel.toFixed(1)} g</span></div>
+        <div class="result-row"><span class="k">Berat IP</span><span class="v">${gen.ip.toFixed(1)} g</span></div>
         <div class="usb-formula">Losses = Berat IP ÷ Berat Sampel × 100 = ${fmt(res.losses,'%')}</div>
         ${def.render(res)}`;
     } else {
@@ -2544,9 +2725,9 @@ function runAcak(){
   const usedWrap = document.getElementById('acakInputsUsed');
   const rows = Object.entries(gen)
     .filter(([k]) => k !== 'unit')
-    .map(([k,v]) => `<div class="result-row"><span class="k">${ACAK_INPUT_LABELS[k]||k}</span><span class="v">${v}</span></div>`)
+    .map(([k,v]) => `<div class="result-row"><span class="k">${ACAK_INPUT_LABELS[k]||k}</span><span class="v">${typeof v==='number' ? v.toFixed(k==='moist'?2:1) : v}</span></div>`)
     .join('');
-  usedWrap.innerHTML = `<div class="target-note" style="margin-bottom:6px;">Berat komponen hasil acak (gram) — coba masukkan manual di tab Padatan untuk latihan:</div>${rows}`;
+  usedWrap.innerHTML = `<div class="target-note" style="margin-bottom:6px;">Berat gram dibulatkan ke 0,1 g sesuai ketelitian timbangan. Coba masukkan manual di tab Padatan:</div>${rows}`;
   usedWrap.style.display = 'block';
   const report = buildAcakReport(key,gen,res);
   document.getElementById('acakReportOutput').textContent = report;
