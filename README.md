@@ -22,11 +22,12 @@ Tanpa instal, tanpa server. Buka di browser HP atau laptop.
 | **Acak** (dari tab Rumus) | Alat latihan: data acak dalam rentang aman, tidak masuk rekap |
 
 Tambahan: autosave draft di browser, riwayat koreksi (audit trail), tampilan mobile-first.
+Tanggal default mengikuti waktu lokal, input berat dibersihkan setelah ditambahkan, penyimpanan pada tanggal/jam sama memperbarui rekap, dan pemeriksaan massa mencegah komponen melebihi sampel. Dirt rekap Kernel Silo menunjukkan hasil silo terburuk.
 
 ## Cara Pakai
 
 1. Buka `index.html` di browser (atau host di mana saja, cukup file statis).
-2. Tab **Padatan**: pilih titik sampling, isi berat (gram), lihat hasil dan status.
+2. Tab **Padatan**: pilih titik sampling, isi berat (gram), lihat hasil dan status. Kalkulator menampilkan format laporan siap salin seperti di alat Acak.
 3. Tekan **Tambah ke Sesi Laporan**.
 4. Tab **Laporan**: lengkapi tanggal, jam, dan data cairan/suhu, lalu **Buat Laporan 2 Jam**.
 5. **Salin** atau **Kirim ke WA**, lalu **Simpan Sesi ke Rekap Harian**.
@@ -62,12 +63,10 @@ Tambahan: autosave draft di browser, riwayat koreksi (audit trail), tampilan mob
 - Data hanya di browser perangkat. Hapus data browser berarti data hilang.
 - Modul cairan lengkap (COT, CST, Sludge, Vacuum Dryer) belum selesai.
 - Ambang target masih tetap di dalam kode.
-- Data cairan manual belum ikut masuk ke grafik rekap bila sesi disimpan lewat jalur manual (hanya lewat Laporan Pintar).
-- Ekspor Excel Oil Losses: alamat sel `C4:D4` dan `G4:H4` di header ringkasan perlu diperbaiki.
 
 ## Roadmap
 
-1. Perbaiki bug rekap dan ekspor Oil Losses.
+1. Perbaikan bug rekap, tanggal, validasi input, dan ekspor Oil Losses — selesai.
 2. Backup dan restore data (JSON), self-host library.
 3. Modul cairan lengkap, otomatis masuk Laporan 2 Jam.
 4. Pengaturan target, PWA (offline penuh).
