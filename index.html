@@ -1409,7 +1409,7 @@ function siloCalcHtml(s){
   if(isDirt && siloHasDirtInput(s) && !calculateSilo(s)){
     return '<div class="target-note">Lengkapi berat sampel, Nu, Np, dan cangkang untuk menghitung Dirt.</div>';
   }
-  const result = isDirt ? calculateSilo(s) : null;
+  const result = isDirt && siloHasDirtInput(s) ? calculateSilo(s) : null;
   if(result){
     const dirtStatus = r2(result.dirt) <= 7.0 ? 'ok' : 'warn';
     const moistStatus = s.moist!==null ? (r2(s.moist)<=7.0?'ok':'warn') : null;
