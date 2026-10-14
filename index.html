@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SIGAP Lab</title>
+<title>SiLabor PKS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -333,6 +333,8 @@
   .acak-report{margin-top:12px;padding:14px;border:1px solid var(--ok-line);border-left:4px solid var(--brand);border-radius:10px;background:#F2F8F5;overflow-x:auto;}
   .acak-report h3{font-size:13.5px;margin:0 0 8px;}
   .acak-report pre{margin:0;color:var(--brand-dark);font:600 12.5px/1.65 'JetBrains Mono',monospace;white-space:pre;}
+  .sample-report-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;}
+  .sample-report-head h3{margin:0;}
 
   footer.foot{text-align:center;color:var(--ink-muted);font-size:12px;padding:20px 0 6px;}
 
@@ -364,8 +366,8 @@
     <div class="brand">
       <div class="mark">QC</div>
       <div>
-        <h1> SIGAP Lab (Analisa Sampel Cair dan Padat PKS)</h1>
-        <p>Sampling · Perhitungan dan Laporan Otomatis · Siap Kirim</p>
+        <h1>Analisa Sampel Cair dan Padat PKS</h1>
+        <p>Sampling · Perhitungan Otomatis · Laporan Siap Kirim</p>
       </div>
     </div>
     <div class="top-tabs" role="tablist">
@@ -776,6 +778,7 @@ const state = {
 const DRAFT_KEY = 'labQcPksDraftV1';
 let draftSaveTimer = null;
 let draftPointInputs = {};
+let restoredDraftSavedAt = null;
 
 function emptySession(){
   return {
@@ -832,11 +835,15 @@ function restoreDraft(){
     if(!raw) return false;
     const draft = JSON.parse(raw);
     if(!draft?.state?.session) return false;
+    restoredDraftSavedAt = draft.savedAt || null;
     Object.assign(state, draft.state);
     state.session = Object.assign(emptySession(), draft.state.session);
     state.session.fcyclone = Object.assign({line1:null,line2:null}, draft.state.session.fcyclone || {});
     state.session.manual = draft.state.session.manual || {};
-    state.history = Array.isArray(draft.state.history) ? draft.state.history : [];
+    state.history = (Array.isArray(draft.state.history) ? draft.state.history : []).map(entry => {
+      const siloDirt = (entry.session?.kernelSilo || []).map(silo => silo.dirt).filter(Number.isFinite);
+      return siloDirt.length ? {...entry, kernelDirt:Math.max(...siloDirt)} : entry;
+    });
     state.oilLossHistory = Array.isArray(draft.state.oilLossHistory) ? draft.state.oilLossHistory : [];
     state.audit = Array.isArray(draft.state.audit) ? draft.state.audit : [];
     draftPointInputs = draft.pointInputs || {};
@@ -864,6 +871,12 @@ document.addEventListener('click', scheduleDraftSave);
 
 function n(v){ const x = parseFloat(v); return isNaN(x) ? null : x; }
 function r2(v){ return v===null || v===undefined || isNaN(v) ? null : Math.round(v*100)/100; }
+function localDateInputValue(date=new Date()){
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+function localClockInputValue(date=new Date()){
+  return `${String(date.getHours()).padStart(2,'0')}:00`;
+}
 function fmt(v, suffix){ return (v===null||v===undefined||isNaN(v)) ? '—' : (r2(v).toFixed(2) + (suffix||'')); }
 function sumExact(...values){
   return values.reduce((acc, val) => {
@@ -927,6 +940,40 @@ function logAudit(field, oldVal, newVal){
   renderAudit();
 }
 
+function validateWeightComposition(sample, weights, labels){
+  if(!Number.isFinite(sample) || sample<=0) return 'Berat sampel harus lebih besar dari 0 g.';
+  if(weights.some(value=>!Number.isFinite(value))) return 'Lengkapi semua berat komponen sebelum menghitung.';
+  if(weights.some(value=>value<0)) return 'Berat komponen tidak boleh negatif.';
+  if(weights.some(value=>value>sample)) return `Berat ${labels[weights.findIndex(value=>value>sample)]} melebihi berat sampel. Periksa kemungkinan salah ketik.`;
+  const total=weights.reduce((sum,value)=>sum+value,0);
+  if(total>sample+1e-9) return `Jumlah berat komponen (${fmt(total,' g')}) melebihi berat sampel (${fmt(sample,' g')}). Periksa kembali hasil timbang.`;
+  return null;
+}
+
+function validatePointInputs(key, values){
+  if(key==='fcyclone'){
+    for(const [line,sampleKey,ipKey] of [['Line 1','sampel1','ip1'],['Line 2','sampel2','ip2']]){
+      const sample=values[sampleKey], ip=values[ipKey];
+      if(sample===null && ip===null) continue;
+      if(sample===null || ip===null) return `${line}: isi berat sampel dan IP, atau kosongkan keduanya.`;
+      const error=validateWeightComposition(sample,[ip],[`IP ${line}`]);
+      if(error) return `${line}: ${error}`;
+    }
+    return null;
+  }
+  const components={
+    ripple:['nu','np'],
+    intiBasah:['nu','np','c'],
+    claybath:['nu','np','ku','kp'],
+    ltds1:['ip'],
+    ltds2:['ip']
+  }[key] || [];
+  const error=validateWeightComposition(values.sampel,components.map(field=>values[field]),components.map(field=>field.toUpperCase()));
+  if(error) return error;
+  if(key==='ripple') return validateWeightComposition(values.sampel,[values.bk],['BK']);
+  return null;
+}
+
 function showToast(message){
   const stack = document.getElementById('toastStack');
   if(!stack) return;
@@ -956,8 +1003,8 @@ const POINTS = {
       const totalNutRounded = sumRounded(nu, np);
       const efisiensi = 100 - totalNut;
       const bk = v.bk/v.sampel*100;
-      const effOk = efisiensi >= 98;
-      const bkOk = bk >= 11 && bk <= 12.5;
+      const effOk = r2(efisiensi) >= 98;
+      const bkOk = r2(bk) >= 11 && r2(bk) <= 12.5;
       const status = (effOk && bkOk) ? 'ok' : 'warn';
       return {unit:v.unit, nu, np, totalNut, totalNutRounded, efisiensi, bk, status, effOk, bkOk};
     },
@@ -986,7 +1033,7 @@ const POINTS = {
       const nu=v.nu/v.sampel*100, np=v.np/v.sampel*100, c=v.c/v.sampel*100;
       const totalDirt = sumExact(nu, np, c);
       const totalDirtRounded = sumRounded(nu, np, c);
-      const status = totalDirt > 7.0 ? 'warn' : 'ok';
+      const status = r2(totalDirt) > 7.0 ? 'warn' : 'ok';
       return {nu,np,c,totalDirt,totalDirtRounded,status};
     },
     render(res){
@@ -1018,8 +1065,8 @@ const POINTS = {
       const totalLosses = sumExact(nu, np, ku, kp);
       const totalLossesRounded = sumRounded(nu, np, ku, kp);
       let status = 'ok';
-      if(totalLosses >= 0.90) status = 'danger';
-      else if(totalLosses > 0.80) status = 'warn';
+      if(r2(totalLosses) >= 0.90) status = 'danger';
+      else if(r2(totalLosses) > 0.80) status = 'warn';
       return {nu,np,ku,kp,totalLosses,totalLossesRounded,status};
     },
     render(res){
@@ -1048,7 +1095,7 @@ const POINTS = {
     ],
     compute(v){
       const losses = v.ip/v.sampel*100;
-      return {losses, status: losses <= 0.10 ? 'ok' : 'warn'};
+      return {losses, status: r2(losses) <= 0.10 ? 'ok' : 'warn'};
     },
     render(res){
       return `
@@ -1066,7 +1113,7 @@ const POINTS = {
     ],
     compute(v){
       const losses = v.ip/v.sampel*100;
-      return {losses, status: losses <= 0.45 ? 'ok' : 'warn'};
+      return {losses, status: r2(losses) <= 0.45 ? 'ok' : 'warn'};
     },
     render(res){
       return `
@@ -1088,8 +1135,8 @@ const POINTS = {
     compute(v){
       const l1 = (v.sampel1 && v.ip1!==null) ? v.ip1/v.sampel1*100 : null;
       const l2 = (v.sampel2 && v.ip2!==null) ? v.ip2/v.sampel2*100 : null;
-      const s1 = l1===null ? null : (l1<=0.86?'ok':'warn');
-      const s2 = l2===null ? null : (l2<=0.86?'ok':'warn');
+      const s1 = l1===null ? null : (r2(l1)<=0.86?'ok':'warn');
+      const s2 = l2===null ? null : (r2(l2)<=0.86?'ok':'warn');
       return {line1:l1, line2:l2, status1:s1, status2:s2};
     },
     render(res){
@@ -1153,6 +1200,13 @@ function renderPointBody(){
       <div class="field-row">${inputsHtml}</div>
       <div class="result-card" id="result_${key}"><div class="target-note">Isi berat sampel untuk melihat hasil.</div></div>
     </div>
+    <div class="acak-report" id="sampleReportWrap_${key}" style="display:none;">
+      <div class="sample-report-head">
+        <h3>Hasil format laporan</h3>
+        <button class="btn ghost small" type="button" onclick="copyText(document.getElementById('sampleReportOutput_${key}').textContent,'Format laporan berhasil disalin.')">Salin format</button>
+      </div>
+      <pre id="sampleReportOutput_${key}"></pre>
+    </div>
     <div class="row-actions">
       <button class="btn primary" id="addBtn_${key}" onclick="addToSession('${key}')" disabled>Tambah ke Sesi Laporan</button>
     </div>`;
@@ -1184,15 +1238,34 @@ function recompute(key){
   const {v, allNumericFilled} = collectInputs(key);
   const resultEl = document.getElementById(`result_${key}`);
   const btn = document.getElementById(`addBtn_${key}`);
+  const reportWrap = document.getElementById(`sampleReportWrap_${key}`);
+  const reportOutput = document.getElementById(`sampleReportOutput_${key}`);
+  const setSampleReport = res => {
+    if(!reportWrap || !reportOutput) return;
+    const report = buildAcakReport(key,v,res);
+    reportOutput.textContent = report;
+    reportWrap.style.display = report ? 'block' : 'none';
+  };
+  const hideSampleReport = () => {
+    if(reportWrap) reportWrap.style.display = 'none';
+  };
 
   if(key === 'fcyclone'){
-    // partial fill allowed (either line can be computed independently)
+    const validationError=validatePointInputs(key,v);
+    if(validationError){
+      resultEl.innerHTML=`<div class="danger-alert">⚠ ${escapeHtml(validationError)}</div>`;
+      hideSampleReport();
+      btn.disabled=true;
+      return;
+    }
     const res = def.compute(v);
     if(res.line1===null && res.line2===null){
       resultEl.innerHTML = '<div class="target-note">Isi berat sampel minimal salah satu line.</div>';
+      hideSampleReport();
       btn.disabled = true;
     } else {
       resultEl.innerHTML = def.render(res);
+      setSampleReport(res);
       btn.disabled = false;
     }
     state._lastCompute = state._lastCompute || {};
@@ -1202,11 +1275,20 @@ function recompute(key){
 
   if(!allNumericFilled || !v.sampel){
     resultEl.innerHTML = '<div class="target-note">Isi berat sampel untuk melihat hasil.</div>';
+    hideSampleReport();
     btn.disabled = true;
+    return;
+  }
+  const validationError=validatePointInputs(key,v);
+  if(validationError){
+    resultEl.innerHTML=`<div class="danger-alert">⚠ ${escapeHtml(validationError)}</div>`;
+    hideSampleReport();
+    btn.disabled=true;
     return;
   }
   const res = def.compute(v);
   resultEl.innerHTML = def.render(res);
+  setSampleReport(res);
   state._lastCompute = state._lastCompute || {};
   state._lastCompute[key] = res;
   btn.disabled = false;
@@ -1225,6 +1307,14 @@ function addToSession(key){
     state.session[key] = res;
   }
   renderSessionChips();
+  POINTS[key].inputs.forEach(field=>{
+    const id=`in_${key}_${field.id}`;
+    const input=document.getElementById(id);
+    if(input) input.value='';
+    draftPointInputs[id]='';
+  });
+  delete state._lastCompute[key];
+  recompute(key);
   showToast(POINTS[key].label + ' berhasil ditambahkan ke Sesi Laporan 2 Jam.');
 }
 
@@ -1265,12 +1355,12 @@ function removeSiloCard(id){
   siloDrafts = siloDrafts.filter(s => s.id !== id);
   renderSiloList();
 }
-// Text/status field changes are infrequent — safe to re-render the whole card.
+// Updating the silo number does not affect calculated fields, so keep its input mounted.
 function onSiloTextChange(id, field, val){
   const s = siloDrafts.find(s => s.id === id);
   if(!s) return;
   s[field] = val;
-  renderSiloList();
+  if(field === 'status') renderSiloList();
 }
 // Numeric fields fire on every keystroke — never rebuild the input itself,
 // only refresh this card's calculated result panel, otherwise the field
@@ -1283,27 +1373,62 @@ function onSiloNumberInput(id, field, val){
   if(calcEl) calcEl.innerHTML = siloCalcHtml(s);
 }
 function calculateSilo(s){
-  if(!s.sampel || s.sampel <= 0) return null;
+  if(siloValidationError(s)) return null;
   const nu = (s.nu||0)/s.sampel*100;
   const np = (s.np||0)/s.sampel*100;
   const c = (s.c||0)/s.sampel*100;
   return {nu, np, c, dirt:sumExact(nu, np, c), bk:s.bk ? s.bk/s.sampel*100 : null};
 }
+function siloHasDirtInput(s){
+  return ['sampel','nu','np','c','bk'].some(field=>s[field]!==null && s[field]!==undefined && s[field]!=='');
+}
+function siloValidationError(s){
+  if(s.moist!==null && s.moist!==undefined && s.moist!=='' &&
+    (!Number.isFinite(s.moist) || s.moist<0 || s.moist>100)){
+    return 'Moisture harus berada di antara 0% dan 100%.';
+  }
+  if(s.status==='dirt'){
+    if(!siloHasDirtInput(s)) return null;
+    const error=validateWeightComposition(s.sampel,[s.nu,s.np,s.c],['Nu','Np','Cangkang']);
+    if(error) return error;
+    if(s.bk!==null && s.bk!==undefined){
+      const bkError=validateWeightComposition(s.sampel,[s.bk],['BK/IP']);
+      if(bkError) return bkError;
+    }
+    return null;
+  }
+  return null;
+}
 function siloCalcHtml(s){
   const isDirt = s.status === 'dirt';
+  const validationError=siloValidationError(s);
+  if(validationError) return `<div class="danger-alert">⚠ ${escapeHtml(validationError)}</div>`;
+  if(isDirt && !siloHasDirtInput(s) && s.moist!==null){
+    return '<div class="target-note">Isi data dirt lengkap atau ubah status menjadi Moisture saja.</div>';
+  }
+  if(isDirt && siloHasDirtInput(s) && !calculateSilo(s)){
+    return '<div class="target-note">Lengkapi berat sampel, Nu, Np, dan cangkang untuk menghitung Dirt.</div>';
+  }
   const result = isDirt ? calculateSilo(s) : null;
   if(result){
-    const dirtStatus = result.dirt <= 7.0 ? 'ok' : 'warn';
-    const moistStatus = s.moist!==null ? (s.moist<=7.0?'ok':'warn') : null;
+    const dirtStatus = r2(result.dirt) <= 7.0 ? 'ok' : 'warn';
+    const moistStatus = s.moist!==null ? (r2(s.moist)<=7.0?'ok':'warn') : null;
     return `
       ${dualRow('Nut Utuh', result.nu)}
       ${dualRow('Nut Pecah', result.np)}
       ${dualRow('Cangkang', result.c)}
       ${dualRow('Total Kotoran (Dirt)', result.dirt)} ${badge(dirtStatus)}
       ${result.bk!==null?compRow('%BK', result.bk):''}
-      ${s.moist!==null?`<div class="result-row"><span class="k">Moisture</span><span class="v">${fmt(s.moist,'%')}</span> ${badge(moistStatus)}</div>`:''}`;
+      ${s.moist!==null?`<div class="result-row"><span class="k">Moisture</span><span class="v">${fmt(s.moist,'%')}</span> ${badge(moistStatus)}</div>`:''}
+      <div class="acak-report">
+        <div class="sample-report-head">
+          <h3>Hasil format laporan</h3>
+          <button class="btn ghost small" type="button" onclick="copyText(document.getElementById('siloReportOutput_${s.id}').textContent,'Format laporan berhasil disalin.')">Salin format</button>
+        </div>
+        <pre id="siloReportOutput_${s.id}">${escapeHtml(buildAcakReport('kernelSilo',s,result))}</pre>
+      </div>`;
   } else if(s.moist!==null){
-    const moistStatus = s.moist<=7.0?'ok':'warn';
+    const moistStatus = r2(s.moist)<=7.0?'ok':'warn';
     return `<div class="result-row"><span class="k">Moisture</span><span class="v">${fmt(s.moist,'%')}</span> ${badge(moistStatus)}</div>`;
   }
   return '<div class="target-note">Isi berat sampel (atau moisture) untuk melihat hasil.</div>';
@@ -1320,7 +1445,7 @@ function renderSiloList(){
         <button class="btn ghost small" onclick="removeSiloCard(${s.id})">Hapus</button>
       </div>
       <div class="silo-input-grid">
-        <div class="field"><label for="siloNo_${s.id}">No. Silo</label><input id="siloNo_${s.id}" type="text" value="${s.no||''}" oninput="onSiloTextChange(${s.id},'no',this.value)"></div>
+        <div class="field"><label for="siloNo_${s.id}">No. Silo</label><input id="siloNo_${s.id}" type="text" value="${escapeHtml(s.no||'')}" oninput="onSiloTextChange(${s.id},'no',this.value)"></div>
         <div class="field"><label>Status</label>
           <select onchange="onSiloTextChange(${s.id},'status',this.value)">
             <option value="dirt" ${isDirt?'selected':''}>Data dirt lengkap</option>
@@ -1341,6 +1466,20 @@ function renderSiloList(){
 }
 
 function commitSilos(){
+  for(const silo of siloDrafts){
+    if(silo.status==='dirt' && !siloHasDirtInput(silo)){
+      if(silo.moist!==null && silo.moist!==undefined){
+        showToast(`Kernel Silo ${silo.no||''}: ubah status menjadi Moisture saja untuk menyimpan moisture tanpa data dirt.`);
+        return;
+      }
+      continue;
+    }
+    const error=siloValidationError(silo);
+    if(error || (silo.status==='dirt' && !calculateSilo(silo))){
+      showToast(`Kernel Silo ${silo.no||''}: ${error||'Lengkapi berat sampel, Nu, Np, dan cangkang.'}`);
+      return;
+    }
+  }
   const committed = siloDrafts.map(s => {
     const result = s.status === 'dirt' ? calculateSilo(s) : null;
     if(result){
@@ -1491,7 +1630,18 @@ function pcCardHtml(groupKey, c, slotNo, lineKey){
   </div>`;
 }
 
+function pcHasInput(c){
+  return [c.sampel,c.nu,c.np,c.c,c.ku,c.kp].some(value=>value!==null && value!==undefined && value!=='');
+}
+
+function pcValidationError(c){
+  return validateWeightComposition(c.sampel,[c.nu,c.np,c.c,c.ku,c.kp],['Nu','Np','Cangkang','Ku','Kp']);
+}
+
 function pcCalcHtml(c){
+  if(!pcHasInput(c)) return '<div class="target-note">Isi berat sampel dan komponen (Nu/Np/C/Ku/Kp) untuk melihat hasil.</div>';
+  const validationError=pcValidationError(c);
+  if(validationError) return `<div class="danger-alert">⚠ ${escapeHtml(validationError)}</div>`;
   const totalNutWeight = sumExact(c.nu||0, c.np||0, c.c||0, c.ku||0, c.kp||0);
   if(!c.sampel || !totalNutWeight){
     return '<div class="target-note">Isi berat sampel dan komponen (Nu/Np/C/Ku/Kp) untuk melihat hasil.</div>';
@@ -1582,11 +1732,17 @@ function getPressCakeLineLabel(lineKey){
 
 function buildPressCakeReport(){
   const selectedKey = getSelectedPressCakeKey();
-  const cards = (pressCakeState.groups[selectedKey] || []).filter(c => c.sampel || c.nu || c.np || c.c || c.ku || c.kp);
+  const cards = (pressCakeState.groups[selectedKey] || []).filter(pcHasInput);
   if(cards.length === 0){
     const text = ['Press Cake Analisis', getPressCakeDateLabel(pressCakeState.date), getPressCakeShiftLabel(selectedKey), ''].join('\n').trim();
     document.getElementById('pcReportOutput').textContent = text;
     document.getElementById('pcReportWrap').style.display = 'block';
+    return;
+  }
+  const invalidCard=cards.find(card=>pcValidationError(card));
+  if(invalidCard){
+    showToast(`Press Cake ${invalidCard.no||''}: ${pcValidationError(invalidCard)}`);
+    document.getElementById('pcReportWrap').style.display='none';
     return;
   }
 
@@ -1614,6 +1770,7 @@ function buildPressCakeReport(){
       lines.push(`Broken Nut thdp total Nut : ${fmt(res.brokenNutVsNut)}%`);
       lines.push(`Broken Kernel thdp total Nut : ${fmt(res.brokenKernelVsNut)}%`);
       lines.push(`Broken Nut thdp sample : ${fmt(res.brokenNutVsSample)}%`);
+      lines.push(`Broken Kernel thdp sample : ${fmt(res.brokenKernelVsSample)}%`);
       lines.push('');
     });
   });
@@ -1893,7 +2050,7 @@ function copyReport(){
 }
 
 function parseSmartReport(text){
-  const dateMatch = text.match(/(\d{1,2})\s*[-/]\s*(\d{1,2})\s*[-/]\s*(\d{4})/);
+  const dateMatch = text.match(/(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{4})/);
   const timeMatch = text.match(/Laporan\s+Jam\s+(\d{1,2}):(\d{2})/i);
   if(!dateMatch || !timeMatch) return {error:'Tanggal atau jam laporan tidak ditemukan. Sertakan format tanggal dan "Laporan Jam HH:MM".'};
   const day = Number(dateMatch[1]), month = Number(dateMatch[2]), year = Number(dateMatch[3]);
@@ -1947,7 +2104,7 @@ function parseSmartReport(text){
     }
     if(currentSilo){
       if(label.startsWith('moist')) currentSilo.moist=value;
-      else if(label.startsWith('dirt')) currentSilo.dirt=value;
+      else if(label.startsWith('dirt') || label.startsWith('total kotoran')) currentSilo.dirt=value;
       else if(label.startsWith('broken')) currentSilo.bk=value;
       else if(label.startsWith('nut utuh')) currentSilo.nu=value;
       else if(label.startsWith('nut pecah')) currentSilo.np=value;
@@ -2001,7 +2158,7 @@ function saveSmartReport(){
     time:now.toLocaleString('id-ID'),savedAt:now.toISOString(),source:'smart-report',reportText:text,
     ltds1:parsed.metrics.ltds1,ltds2:parsed.metrics.ltds2,fc1:parsed.metrics.fc1,fc2:parsed.metrics.fc2,
     claybath:parsed.metrics.claybath,intiDirt:parsed.metrics.intiDirt,
-    kernelMoist:avg(silos.map(silo=>silo.moist)),kernelDirt:avg(dirtSilos.map(silo=>silo.dirt)),
+    kernelMoist:avg(silos.map(silo=>silo.moist)),kernelDirt:maxFinite(dirtSilos.map(silo=>silo.dirt)),
     kernelNu:avg(dirtSilos.map(silo=>silo.nu)),kernelNp:avg(dirtSilos.map(silo=>silo.np)),kernelShell:avg(dirtSilos.map(silo=>silo.c)),
     rippleEfficiency:parsed.metrics.rippleEfficiency,rippleBroken:parsed.metrics.rippleBroken,
     ...parsed.manual,
@@ -2060,11 +2217,12 @@ function parseOilLossReport(text){
   if(dateObject.getFullYear()!==year||dateObject.getMonth()!==month-1||dateObject.getDate()!==day){
     return {error:'Tanggal laporan Oil Losses tidak valid.'};
   }
-  const shiftMatch=text.match(/\bshift\s*(i{1,3}|[1-3])(?:\s*\(([^)]+)\))?/i);
+  const shiftMatch=text.match(/\bshift\s*(i{1,3}|[1-3])(?:\s*\(([^)]+)\)|\s+(pagi|malam))?/i);
   if(!shiftMatch) return {error:'Shift tidak ditemukan. Sertakan keterangan seperti "Shift II (Pagi)".'};
   const roman=shiftMatch[1].toUpperCase();
   const shiftNumber=/^\d$/.test(roman)?Number(roman):({I:1,II:2,III:3}[roman]);
-  const shiftLabel=`Shift ${roman}${shiftMatch[2]?` (${shiftMatch[2].trim()})`:''}`;
+  const shiftDescription=shiftMatch[2]||shiftMatch[3]||'';
+  const shiftLabel=`Shift ${roman}${shiftDescription?` (${shiftDescription.trim()})`:''}`;
   const stations=new Map();
   let line='',currentStation=null;
   const numberFrom=value=>{
@@ -2104,8 +2262,10 @@ function parseOilLossReport(text){
       return;
     }
     const pair=lineText.match(/^([^:=]+?)\s*[:=]\s*(.*)$/);
-    if(!pair||!currentStation) return;
+    if(!pair){currentStation=null;return;}
+    if(!currentStation) return;
     const label=normalizeOilLossLabel(pair[1]);
+    if(!/^(?:moist|moisture|owm|odm)$/.test(label)){currentStation=null;return;}
     const value=numberFrom(pair[2]);
     if(value===null||!Number.isFinite(value)) return;
     const row=stations.get(currentStation.key);
@@ -2117,8 +2277,14 @@ function parseOilLossReport(text){
   if(!rows.length) return {error:'Tidak ada titik sampling atau nilai Moist/OWM/ODM yang dikenali. Periksa judul titik dan tanda "=" atau ":".'};
   return {
     date:`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`,
-    shiftNumber,shiftLabel,rows,recognizedValues:rows.reduce((count,row)=>count+['moist','owm','odm'].filter(key=>Number.isFinite(row[key])).length,0)
+    shiftNumber,shiftLabel,shiftIdentity:oilLossShiftIdentity(shiftNumber,shiftLabel),
+    rows,recognizedValues:rows.reduce((count,row)=>count+['moist','owm','odm'].filter(key=>Number.isFinite(row[key])).length,0)
   };
+}
+
+function oilLossShiftIdentity(shiftNumber,shiftLabel){
+  const normalized=normalizeOilLossLabel(shiftLabel).replace(/^shift (?:i{1,3}|[1-3])\s*/, '');
+  return `${shiftNumber}_${normalized.replace(/\s+/g,'-')||'unspecified'}`;
 }
 
 function saveOilLossReport(){
@@ -2127,11 +2293,11 @@ function saveOilLossReport(){
   const parsed=parseOilLossReport(text);
   if(parsed.error){status.textContent=parsed.error;status.style.color='var(--danger-ink)';return;}
   const now=new Date();
-  const entry={id:`${parsed.date}_shift${parsed.shiftNumber}`,date:parsed.date,shiftNumber:parsed.shiftNumber,shiftLabel:parsed.shiftLabel,rows:parsed.rows,sourceText:text,savedAt:now.toISOString()};
-  const existingIndex=state.oilLossHistory.findIndex(item=>item.date===entry.date&&item.shiftNumber===entry.shiftNumber);
+  const entry={id:`${parsed.date}_shift${parsed.shiftIdentity}`,date:parsed.date,shiftNumber:parsed.shiftNumber,shiftLabel:parsed.shiftLabel,shiftIdentity:parsed.shiftIdentity,rows:parsed.rows,sourceText:text,savedAt:now.toISOString()};
+  const existingIndex=state.oilLossHistory.findIndex(item=>item.date===entry.date&&oilLossShiftIdentity(item.shiftNumber,item.shiftLabel)===entry.shiftIdentity);
   if(existingIndex>=0) state.oilLossHistory[existingIndex]=entry;
   else state.oilLossHistory.push(entry);
-  state.oilLossHistory.sort((a,b)=>`${a.date}_${a.shiftNumber}`.localeCompare(`${b.date}_${b.shiftNumber}`));
+  state.oilLossHistory.sort((a,b)=>`${a.date}_${oilLossShiftIdentity(a.shiftNumber,a.shiftLabel)}`.localeCompare(`${b.date}_${oilLossShiftIdentity(b.shiftNumber,b.shiftLabel)}`));
   document.getElementById('oilLossExportDate').value=parsed.date;
   renderOilLossHistory();
   const saved=saveDraft();
@@ -2184,7 +2350,7 @@ function renderOilLossHistory(){
   const weekRange=oilLossWeekRange(input.value);
   document.getElementById('oilLossHistoryMeta').textContent=`${state.oilLossHistory.length} laporan shift tersimpan`;
   document.getElementById('oilLossExportButton').disabled=state.oilLossHistory.length===0;
-  const latest=[...state.oilLossHistory].sort((a,b)=>`${b.date}_${b.shiftNumber}`.localeCompare(`${a.date}_${a.shiftNumber}`)).slice(0,8);
+  const latest=[...state.oilLossHistory].sort((a,b)=>`${b.date}_${oilLossShiftIdentity(b.shiftNumber,b.shiftLabel)}`.localeCompare(`${a.date}_${oilLossShiftIdentity(a.shiftNumber,a.shiftLabel)}`)).slice(0,8);
   const recentRows=latest.map(entry=>{
     const values=entry.rows.reduce((count,row)=>count+['moist','owm','odm'].filter(key=>Number.isFinite(row[key])).length,0);
     return `<tr><td>${oilLossDateLabel(entry.date)}</td><td>${escapeHtml(entry.shiftLabel)}</td><td>${entry.rows.length}</td><td>${values}</td></tr>`;
@@ -2281,8 +2447,8 @@ function addOilLossWorkbookSheets(workbook,title,entries,periodLabel){
   summary.mergeCells('A2:L2');
   summary.getCell('A2').value=`Periode ${periodLabel} · ${entries.length} laporan shift · rata-rata per titik sampling`;
   summary.getCell('A2').font={name:'Aptos',size:11,color:{argb:'FF52645D'}};
-  summary.mergeCells('A4:B4');summary.getCell('A4').value='Laporan shift';summary.getCell('C4:D4').value=entries.length;
-  summary.mergeCells('E4:F4');summary.getCell('E4').value='Titik ukur terdata';summary.getCell('G4:H4').value=entries.reduce((total,entry)=>total+entry.rows.length,0);
+  summary.mergeCells('A4:B4');summary.getCell('A4').value='Laporan shift';summary.mergeCells('C4:D4');summary.getCell('C4').value=entries.length;
+  summary.mergeCells('E4:F4');summary.getCell('E4').value='Titik ukur terdata';summary.mergeCells('G4:H4');summary.getCell('G4').value=entries.reduce((total,entry)=>total+entry.rows.length,0);
   summary.mergeCells('I4:J4');summary.getCell('I4').value='Waktu ekspor';summary.mergeCells('K4:L4');summary.getCell('K4').value=new Date();
   for(const address of ['A4','C4','E4','G4','I4','K4']){
     const cell=summary.getCell(address);cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE6F0EB'}};
@@ -2403,7 +2569,7 @@ function saveSessionToRecap(){
     claybath: s.claybath ? s.claybath.totalLosses : null,
     intiDirt: s.intiBasah ? s.intiBasah.totalDirt : null,
     kernelMoist: avg(silos.map(k => k.moist)),
-    kernelDirt: avg(dirtSilos.map(k => k.dirt)),
+    kernelDirt: maxFinite(dirtSilos.map(k => k.dirt)),
     kernelNu: avg(dirtSilos.map(k => k.nu)),
     kernelNp: avg(dirtSilos.map(k => k.np)),
     kernelShell: avg(dirtSilos.map(k => k.c)),
@@ -2413,23 +2579,35 @@ function saveSessionToRecap(){
     bunkerGroup: document.getElementById('bunkerGroup').value,
     pressUnit: n(document.getElementById('pressUnit').value),
     bunchPressUnit: n(document.getElementById('bunchPressUnit').value),
+    ...Object.fromEntries(MANUAL_FIELDS.map(([key]) => [key, n(s.manual[key])])),
     session: JSON.parse(JSON.stringify(s))
   };
   const hasAny = ['ltds1','ltds2','fc1','fc2','claybath','intiDirt','kernelMoist','kernelDirt','rippleEfficiency','rippleBroken']
-    .some(key => Number.isFinite(entry[key]));
+    .some(key => Number.isFinite(entry[key])) || MANUAL_FIELDS.some(([key]) => Number.isFinite(entry[key]));
   if(!hasAny){ showToast('Sesi ini belum punya nilai padatan untuk direkap.'); return; }
-  state.history.push(entry);
+  const existingIndex=state.history.findIndex(item=>item.date===entry.date && item.clock===entry.clock);
+  if(existingIndex>=0){
+    entry.id=state.history[existingIndex].id;
+    state.history[existingIndex]=entry;
+  }else{
+    state.history.push(entry);
+  }
   renderRecap();
   const saved = saveDraft();
   showToast(saved
-    ? 'Sesi tersimpan ke rekap harian (' + state.history.length + ' rekaman).'
-    : 'Rekaman ditambahkan, tetapi penyimpanan browser gagal. Ekspor segera sebagai cadangan.');
+    ? (existingIndex>=0?'Rekaman sesi pada tanggal dan jam yang sama diperbarui.':'Sesi tersimpan ke rekap harian (' + state.history.length + ' rekaman).')
+    : 'Rekaman diperbarui, tetapi penyimpanan browser gagal. Ekspor segera sebagai cadangan.');
 }
 
 function avg(arr){
   const vals = arr.filter(v => v!==null && v!==undefined && !isNaN(v));
   if(vals.length===0) return null;
   return vals.reduce((a,b)=>a+b,0)/vals.length;
+}
+
+function maxFinite(arr){
+  const vals=arr.filter(Number.isFinite);
+  return vals.length?Math.max(...vals):null;
 }
 
 let recapFilterDate = 'latest';
@@ -2486,15 +2664,18 @@ function getFilteredHistory(){
 function getRecapAnomalies(entry){
   const anomalies = [];
   DAILY_METRICS.forEach(metric => {
-    const value = entry[metric.key];
+    const value = metric.key==='kernelDirt'
+      ? maxFinite((entry.session?.kernelSilo||[]).map(silo=>silo.dirt)) ?? entry[metric.key]
+      : entry[metric.key];
     if(!Number.isFinite(value)) return;
-    const below = metric.targetMin!==undefined && value < metric.targetMin;
-    const above = metric.targetMax!==undefined && value > metric.targetMax;
+    const displayedValue=r2(value);
+    const below = metric.targetMin!==undefined && displayedValue < metric.targetMin;
+    const above = metric.targetMax!==undefined && displayedValue > metric.targetMax;
     if(!below && !above) return;
     anomalies.push({
       label:metric.label,
       value,
-      severity:metric.criticalAt!==undefined && value>=metric.criticalAt ? 'critical' : 'warn',
+      severity:metric.criticalAt!==undefined && displayedValue>=metric.criticalAt ? 'critical' : 'warn',
       target:metric.targetMin!==undefined && metric.targetMax!==undefined
         ? `${metric.targetMin.toFixed(2)}–${metric.targetMax.toFixed(2)}%`
         : metric.targetMin!==undefined ? `≥ ${metric.targetMin.toFixed(2)}%` : `≤ ${metric.targetMax.toFixed(2)}%`
@@ -2624,7 +2805,7 @@ function buildRecapContent(entries){
   const kpis = [
     {label:'Rekaman 2 jam',value:entries.length,detail:'pada filter yang dipilih'},
     {label:'Rekaman abnormal',value:entries.filter(entry=>getRecapAnomalies(entry).length).length,detail:`${allAnomalies.length} temuan · ${criticalCount} kritis`,alert:allAnomalies.length>0},
-    {label:'Rata-rata Dirt Kernel',value:avgValue('kernelDirt'),detail:'target ≤ 7.00%'},
+    {label:'Rata-rata Dirt Kernel Terburuk',value:avgValue('kernelDirt'),detail:'silo terburuk per sesi · target ≤ 7.00%'},
     {label:'Rata-rata Losses Claybath',value:avgValue('claybath'),detail:'peringatan > 0.80%'}
   ];
   const kpiHtml = kpis.map(item => `<div class="recap-kpi ${item.alert?'alert':''}"><span class="label">${item.label}</span><strong class="value">${item.value}</strong><span class="detail">${item.detail}</span></div>`).join('');
@@ -2818,9 +2999,14 @@ function copyRecap(){
 function resetSession(){
   if(!confirm('Mulai sesi baru? Data sesi berjalan saat ini akan dikosongkan (rekap harian tidak terpengaruh).')) return;
   state.session = emptySession();
+  const now=new Date();
+  document.getElementById('sesiTanggal').value=localDateInputValue(now);
+  document.getElementById('sesiJam').value=localClockInputValue(now);
   addSiloDraftDefaults();
+  draftPointInputs={};
   renderSessionChips();
   renderManualFields();
+  renderPointBody();
   document.getElementById('noteField').value = '';
   document.getElementById('reportOutputWrap').style.display = 'none';
   if(state.activePoint === 'kernelSilo') renderSiloList();
@@ -3099,8 +3285,8 @@ function buildAcakReport(key,gen,res){
       acakReportComponent('Nu',gen.nu,gen.sampel,'\\'),
       `${acakReportComponent('Np',gen.np,gen.sampel,'|')} ${acakNumber(dirt)}`,
       acakReportComponent('C',gen.c,gen.sampel,'/'),
-      acakReportComponent('IP',gen.bk,gen.sampel),
-      `M               ${acakNumber(gen.moist)}`];
+      ...(gen.bk===null || gen.bk===undefined || gen.bk==='' ? [] : [acakReportComponent('IP',gen.bk,gen.sampel)]),
+      ...(gen.moist===null || gen.moist===undefined || gen.moist==='' ? [] : [`M               ${acakNumber(gen.moist)}`])];
   } else if(key==='claybath'){
     const losses=sumExact(acakReportPercent(gen.nu,gen.sampel,0.45),acakReportPercent(gen.np,gen.sampel,0.55),acakReportPercent(gen.ku,gen.sampel),acakReportPercent(gen.kp,gen.sampel));
     lines=[`S-Claybath      ${acakNumber(gen.sampel,1)}`,
@@ -3113,11 +3299,15 @@ function buildAcakReport(key,gen,res){
       acakReportComponent('IP',gen.ip,gen.sampel,'/'),
       `Losses          ${acakNumber(acakReportPercent(gen.ip,gen.sampel))}`];
   } else if(key==='fcyclone'){
-    lines=['F.Cyclone',
-      `Line 1          ${acakNumber(gen.sampel1,1)}`,
-      acakReportComponent('IP L1',gen.ip1,gen.sampel1,'/'),
-      `Line 2          ${acakNumber(gen.sampel2,1)}`,
-      acakReportComponent('IP L2',gen.ip2,gen.sampel2,'/')];
+    lines=['F.Cyclone'];
+    if(gen.sampel1 && gen.ip1!==null){
+      lines.push(`Line 1          ${acakNumber(gen.sampel1,1)}`);
+      lines.push(acakReportComponent('IP L1',gen.ip1,gen.sampel1,'/'));
+    }
+    if(gen.sampel2 && gen.ip2!==null){
+      lines.push(`Line 2          ${acakNumber(gen.sampel2,1)}`);
+      lines.push(acakReportComponent('IP L2',gen.ip2,gen.sampel2,'/'));
+    }
   }
   return lines.length?[border,...lines,border].join('\n'):'';
 }
@@ -3314,9 +3504,16 @@ function switchMenu(menu){
 }
 
 function initDefaults(){
-  const today = new Date();
-  if(!document.getElementById('sesiTanggal').value) document.getElementById('sesiTanggal').value = today.toISOString().slice(0,10);
-  if(!document.getElementById('sesiJam').value) document.getElementById('sesiJam').value = String(today.getHours()).padStart(2,'0') + ':00';
+  const now=new Date();
+  const today=localDateInputValue(now);
+  const dateInput=document.getElementById('sesiTanggal');
+  const clockInput=document.getElementById('sesiJam');
+  if(dateInput.value && dateInput.value!==today){
+    dateInput.value=today;
+    clockInput.value=localClockInputValue(now);
+  }
+  if(!dateInput.value) dateInput.value=today;
+  if(!clockInput.value) clockInput.value=localClockInputValue(now);
 }
 
 const restored = restoreDraft();
@@ -3329,10 +3526,8 @@ renderAudit();
 initDefaults();
 renderOilLossHistory();
 if(restored){
-  const savedAt = localStorage.getItem(DRAFT_KEY);
-  const draft = savedAt ? JSON.parse(savedAt) : null;
-  document.getElementById('sessionMeta').textContent = draft?.savedAt
-    ? 'Draft dipulihkan ' + new Date(draft.savedAt).toLocaleString('id-ID')
+  document.getElementById('sessionMeta').textContent = restoredDraftSavedAt
+    ? 'Draft dipulihkan ' + new Date(restoredDraftSavedAt).toLocaleString('id-ID')
     : 'Draft dipulihkan';
 }
 saveDraft();
