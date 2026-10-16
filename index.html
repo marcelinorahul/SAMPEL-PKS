@@ -763,7 +763,7 @@
 </main>
 </div>
 
-<footer class="foot">Otomatisasi Laboratorium PKS — By : Rahul M.H </footer>
+<footer class="foot">Otomatisasi Laboratorium PKS — By : Rahul M.H</footer>
 <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="true"></div>
 
 <script>
@@ -881,7 +881,7 @@ function localClockInputValue(date=new Date()){
 }
 function fmt(v, suffix){ return (v===null||v===undefined||isNaN(v)) ? '—' : (r2(v).toFixed(2) + (suffix||'')); }
 function fmtPadatan(v, suffix){
-  return (v===null||v===undefined||!Number.isFinite(Number(v))) ? '—' : (Number(v).toFixed(1) + (suffix||''));
+  return (v===null||v===undefined||!Number.isFinite(Number(v))) ? '—' : (Number(v).toFixed(2) + (suffix||''));
 }
 function sumExact(...values){
   return values.reduce((acc, val) => {
@@ -891,13 +891,14 @@ function sumExact(...values){
 }
 function roundPadatanComponent(value){
   if(value===null || value===undefined || !Number.isFinite(Number(value))) return null;
-  const scaled=Number(value)*10;
+  const scaled=Number(value)*100;
   const lower=Math.floor(scaled);
   const fraction=scaled-lower;
-  return (fraction>0.5+1e-9 ? lower+1 : lower)/10;
+  const tieTolerance=Number.EPSILON*Math.max(1,Math.abs(scaled))*4;
+  return (fraction>0.5+tieTolerance ? lower+1 : lower)/100;
 }
 function sumPadatanComponents(...values){
-  return values.reduce((total,value)=>total+Math.round(Number(value)*10),0)/10;
+  return values.reduce((total,value)=>total+Math.round(Number(value)*100),0)/100;
 }
 function compactExact(value, decimals=4){
   if(value===null || value===undefined || !Number.isFinite(Number(value))) return '—';
@@ -935,11 +936,11 @@ function padatanComponentRow(label, value, suffix){
   if(value===null || value===undefined || !Number.isFinite(Number(value))) return `<div class="result-row"><span class="k">${label}</span><span class="v">—</span></div>`;
   const rounded=roundPadatanComponent(value);
   const roundedValue=Math.abs(Number(value)-rounded)<1e-9 ? '' : `<small>Nilai rumus: ${compactExact(value)}${suffix}</small>`;
-  return `<div class="result-row"><span class="k">${label}</span><span class="v padatan-value" title="Nilai rumus presisi: ${exact(value,6)}${suffix}"><span>${rounded.toFixed(1)}${suffix}</span>${roundedValue}</span></div>`;
+  return `<div class="result-row"><span class="k">${label}</span><span class="v padatan-value" title="Nilai rumus presisi: ${exact(value,6)}${suffix}"><span>${rounded.toFixed(2)}${suffix}</span>${roundedValue}</span></div>`;
 }
-function padatanTotalRow(label, total, exactTotal, suffix, note){
+function padatanTotalRow(label, total, exactTotal, suffix){
   suffix=suffix===undefined?'%':suffix;
-  return `<div class="result-row rounded-row"><span class="k">${label}</span><span class="v padatan-value" title="Nilai rumus presisi: ${exact(exactTotal,6)}${suffix}"><span>${Number(total).toFixed(1)}${suffix}</span></span></div>`;
+  return `<div class="result-row rounded-row"><span class="k">${label}</span><span class="v padatan-value" title="Nilai rumus presisi: ${exact(exactTotal,6)}${suffix}"><span>${Number(total).toFixed(2)}${suffix}</span></span></div>`;
 }
 // Hasil komposit ditampilkan ringkas dengan detail rumus hanya jika nilainya berbeda.
 function dualRow(label, v, suffix){
@@ -1106,7 +1107,7 @@ const POINTS = {
         ${padatanComponentRow('%Kp', res.kp)}
         ${padatanTotalRow('Total Losses', res.totalLosses, res.totalLossesExact)}
         <div class="result-row"><span class="k">Status</span>${badge(res.status)}</div>
-        <div class="target-note">Normal 0.50%–0.80% · Ambang wajib lapor Operator: ≥ 0.90%</div>
+        <div class="target-note">Normal 0.50%–0.80% · Ambang wajib lapor operator: ≥ 0.90%</div>
         ${alertHtml}`;
     }
   },
@@ -1854,27 +1855,31 @@ function getFormulaChecks(){
   const ffa = (5 * 25.6 * 0.1035) / 4;
   const exactTenthBoundary = roundPadatanComponent(5.5);
   const componentRounding = roundPadatanComponent(5.5023);
-  const exactHalfBoundary = roundPadatanComponent(6.15);
+  const belowHalfBoundary = roundPadatanComponent(6.154);
   const aboveHalfBoundary = roundPadatanComponent(6.156);
   const aboveHalfWithTrailingZeroes = roundPadatanComponent(6.56);
-  const roundedComponentSum = sumPadatanComponents(5.5,3.4,0.6);
+  const exactTwoDecimalHalf = roundPadatanComponent(6.155);
+  const aboveTwoDecimalHalf = roundPadatanComponent(6.156);
+  const roundedComponentSum = sumPadatanComponents(0.06,0.78);
 
   return [
     formulaCheck('Ripple Mill — efisiensi', '100 − ((Nu ÷ sampel × 100) + (Np ÷ sampel × 100))', ripple.efisiensi, 98.5, 'Nu=1 g, Np=0.5 g, sampel=100 g.'),
     formulaCheck('Ripple Mill — Broken Kernel', 'BK ÷ sampel × 100', ripple.bk, 11.5, 'BK=11.5 g, sampel=100 g.'),
     formulaCheck('Inti Basah — total dirt', 'Σ(Nu, Np, C) ÷ sampel × 100', inti.totalDirt, 6.5, 'Nu=2 g, Np=1.5 g, C=3 g, sampel=100 g.'),
-    formulaCheck('S-Claybath — total losses', 'Σ hasil pembulatan komponen ke 0,1%', clay.totalLosses, 1.2, 'Nu=1 g, Np=1 g, Ku=0.2 g, Kp=0.1 g, sampel=100 g.'),
+    formulaCheck('S-Claybath — total losses', 'Σ hasil pembulatan komponen ke 0,01%', clay.totalLosses, 1.3, 'Nu=1 g, Np=1 g, Ku=0.2 g, Kp=0.1 g, sampel=100 g.'),
     formulaCheck('LTDS I — losses', 'IP ÷ sampel × 100', ltds1.losses, 0.1, 'IP=0.2 g, sampel=200 g.'),
     formulaCheck('LTDS II — losses', 'IP ÷ sampel × 100', ltds2.losses, 0.4, 'IP=0.8 g, sampel=200 g.'),
     formulaCheck('F.Cyclone — line 1', 'IP line 1 ÷ sampel line 1 × 100', cyclone.line1, 0.5, 'IP1=0.5 g, sampel1=100 g.'),
     formulaCheck('F.Cyclone — line 2', 'IP line 2 ÷ sampel line 2 × 100', cyclone.line2, 0.5, 'IP2=1 g, sampel2=200 g.'),
     formulaCheck('Kernel Silo — dirt', 'Σ(Nu, Np, C) ÷ sampel × 100', siloDirt, 6, 'Nu=2 g, Np=1 g, C=3 g, sampel=100 g.'),
-    formulaCheck('Pembulatan tepat satu desimal', '5,5000% tetap 5,5%', exactTenthBoundary, 5.5, 'Angka tepat pada batas sepersepuluh tidak dinaikkan.'),
-    formulaCheck('Pembulatan di bawah titik tengah', '5,5023% menjadi 5,5%', componentRounding, 5.5, 'Nilai di bawah titik tengah tetap pada sepersepuluh terdekat.'),
-    formulaCheck('Pembulatan tepat pada titik tengah', '6,15000% menjadi 6,1%', exactHalfBoundary, 6.1, 'Titik tengah tepat tidak dinaikkan.'),
-    formulaCheck('Pembulatan di atas titik tengah', '6,15600% menjadi 6,2%', aboveHalfBoundary, 6.2, 'Nilai di atas titik tengah dibulatkan naik.'),
-    formulaCheck('Pembulatan dengan nol di belakang', '6,56000% menjadi 6,6%', aboveHalfWithTrailingZeroes, 6.6, 'Nol di belakang tidak mengubah hasil.'),
-    formulaCheck('Jumlah komponen Padatan', '5,5 + 3,4 + 0,6 tanpa pembulatan ulang', roundedComponentSum, 9.5, 'Total merupakan penjumlahan langsung dari hasil komponen yang sudah dibulatkan.'),
+    formulaCheck('Pembulatan presisi dua desimal', '5,5023% menjadi 5,50%', componentRounding, 5.5, 'Nilai dibulatkan sampai dua angka desimal.'),
+    formulaCheck('Pembulatan tepat satu desimal', '5,5000% menjadi 5,50%', exactTenthBoundary, 5.5, 'Nol tambahan tidak mengubah angka.'),
+    formulaCheck('Pembulatan di bawah titik tengah', '6,15400% menjadi 6,15%', belowHalfBoundary, 6.15, 'Nilai di bawah titik tengah tetap ke bawah.'),
+    formulaCheck('Pembulatan di atas titik tengah', '6,15600% menjadi 6,16%', aboveHalfBoundary, 6.16, 'Nilai melewati titik tengah dibulatkan naik.'),
+    formulaCheck('Pembulatan nol di belakang', '6,56000% menjadi 6,56%', aboveHalfWithTrailingZeroes, 6.56, 'Nol di belakang tidak mengubah hasil.'),
+    formulaCheck('Pembulatan tepat dua desimal', '6,15500% tetap 6,15%', exactTwoDecimalHalf, 6.15, 'Titik tengah tepat tidak dinaikkan.'),
+    formulaCheck('Pembulatan melewati titik tengah dua desimal', '6,15600% menjadi 6,16%', aboveTwoDecimalHalf, 6.16, 'Nilai yang melewati titik tengah dibulatkan naik.'),
+    formulaCheck('Jumlah hasil dua desimal', '0,06 + 0,78 = 0,84 tanpa pembulatan ulang', roundedComponentSum, 0.84, 'Total dijumlahkan dari komponen dua desimal.'),
     formulaCheck('Press Cake — total nut', 'Σ(Nu, Np, C, Ku, Kp) ÷ sampel × 100', cake.totalNutPct, 100, 'Total komponen=100 g, sampel=100 g.'),
     formulaCheck('Sulfit — kadar ppm', 'Titrasi × 0.0125 × faktor × 1000 ÷ volume sampel', sulfit, 62.5, 'Titrasi=2, faktor=50, volume sampel=20.'),
     formulaCheck('FFA — persen asam lemak', 'Titrasi × konstanta × normalitas ÷ berat sampel', ffa, 3.312, 'Titrasi=5, konstanta=25.6, normalitas=0.1035, sampel=4 g.')
@@ -3316,10 +3321,10 @@ function acakReportPercent(weight,sample,factor){
   return weight*(factor===undefined?1:factor)/sample*100;
 }
 
-function acakReportComponent(label,weight,sample,connector,factor,roundPercentUp){
+function acakReportComponent(label,weight,sample,connector,factor,roundPadatanValue){
   const mass=acakReportWeight(weight,sample);
   const percent=acakReportPercent(weight,sample,factor);
-  const percentText=roundPercentUp ? roundPadatanComponent(percent).toFixed(1) : acakNumber(percent);
+  const percentText=roundPadatanValue ? roundPadatanComponent(percent).toFixed(2) : acakNumber(percent);
   return `${label.padEnd(5)} ${mass.text.padStart(8)} / ${percentText.padStart(5)} ${connector||''}`.trimEnd();
 }
 
@@ -3330,19 +3335,19 @@ function buildAcakReport(key,gen,res){
     const totalNut=sumPadatanComponents(roundPadatanComponent(acakReportPercent(gen.nu,gen.sampel)),roundPadatanComponent(acakReportPercent(gen.np,gen.sampel)));
     lines=[`Ripple Mill     ${acakNumber(gen.sampel,1)}`,
       acakReportComponent('Nu',gen.nu,gen.sampel,'\\',undefined,true),
-      `${acakReportComponent('Np',gen.np,gen.sampel,'|',undefined,true)} ${totalNut.toFixed(1)} (Efisiensi: ${(100-totalNut).toFixed(1)}%)`,
+      `${acakReportComponent('Np',gen.np,gen.sampel,'|',undefined,true)} ${totalNut.toFixed(2)} (Efisiensi: ${(100-totalNut).toFixed(2)}%)`,
       acakReportComponent('BK',gen.bk,gen.sampel)];
   } else if(key==='intiBasah'){
     const dirt=sumPadatanComponents(...['nu','np','c'].map(field=>roundPadatanComponent(acakReportPercent(gen[field],gen.sampel))));
     lines=[`Inti Basah      ${acakNumber(gen.sampel,1)}`,
       acakReportComponent('Nu',gen.nu,gen.sampel,'\\',undefined,true),
-      `${acakReportComponent('Np',gen.np,gen.sampel,'|',undefined,true)} ${dirt.toFixed(1)}`,
+      `${acakReportComponent('Np',gen.np,gen.sampel,'|',undefined,true)} ${dirt.toFixed(2)}`,
       acakReportComponent('C',gen.c,gen.sampel,'/',undefined,true)];
   } else if(key==='kernelSilo'){
     const dirt=sumPadatanComponents(...['nu','np','c'].map(field=>roundPadatanComponent(acakReportPercent(gen[field],gen.sampel))));
     lines=[`K. Silo         ${acakNumber(gen.sampel,1)}`,
       acakReportComponent('Nu',gen.nu,gen.sampel,'\\',undefined,true),
-      `${acakReportComponent('Np',gen.np,gen.sampel,'|',undefined,true)} ${dirt.toFixed(1)}`,
+      `${acakReportComponent('Np',gen.np,gen.sampel,'|',undefined,true)} ${dirt.toFixed(2)}`,
       acakReportComponent('C',gen.c,gen.sampel,'/',undefined,true),
       ...(gen.bk===null || gen.bk===undefined || gen.bk==='' ? [] : [acakReportComponent('IP/BK',gen.bk,gen.sampel)]),
       ...(gen.moist===null || gen.moist===undefined || gen.moist==='' ? [] : [`M               ${acakNumber(gen.moist)}`])];
@@ -3350,7 +3355,7 @@ function buildAcakReport(key,gen,res){
     const losses=sumPadatanComponents(roundPadatanComponent(acakReportPercent(gen.nu,gen.sampel,0.45)),roundPadatanComponent(acakReportPercent(gen.np,gen.sampel,0.55)),roundPadatanComponent(acakReportPercent(gen.ku,gen.sampel)),roundPadatanComponent(acakReportPercent(gen.kp,gen.sampel)));
     lines=[`S-Claybath      ${acakNumber(gen.sampel,1)}`,
       acakReportComponent('Nu',gen.nu,gen.sampel,'\\',0.45,true),
-      `${acakReportComponent('Np',gen.np,gen.sampel,'|',0.55,true)} ${losses.toFixed(1)}`,
+      `${acakReportComponent('Np',gen.np,gen.sampel,'|',0.55,true)} ${losses.toFixed(2)}`,
       acakReportComponent('Ku',gen.ku,gen.sampel,'|',undefined,true),
       acakReportComponent('Kp',gen.kp,gen.sampel,'/',undefined,true)];
   } else if(key==='ltds1' || key==='ltds2'){
@@ -3407,8 +3412,8 @@ function runAcak(){
   for(let attempt=0;attempt<100;attempt++){
     gen=generate();
     if(key==='kernelSilo'){
-      const dirt=sumExact(gen.nu,gen.np,gen.c)/gen.sampel*100;
-      res={dirt,dirtStatus:dirt<=7?'ok':'warn',moistStatus:gen.moist<=7?'ok':'warn'};
+      const dirtExact=sumExact(gen.nu,gen.np,gen.c)/gen.sampel*100;
+      res={dirt:dirtExact,dirtExact,dirtStatus:dirtExact<=7?'ok':'warn',moistStatus:gen.moist<=7?'ok':'warn'};
     }else res=def.compute(gen);
     if(isAcakResultSafe(key,res,gen)){
       safe=true;
@@ -3422,12 +3427,16 @@ function runAcak(){
     return;
   }
   if(key === 'kernelSilo'){
+    const nu=acakReportPercent(gen.nu,gen.sampel);
+    const np=acakReportPercent(gen.np,gen.sampel);
+    const c=acakReportPercent(gen.c,gen.sampel);
+    const dirt=sumPadatanComponents(roundPadatanComponent(nu),roundPadatanComponent(np),roundPadatanComponent(c));
     document.getElementById('acakResult').innerHTML = `
-      ${compRow('Nut Utuh (Nu)',gen.nu/gen.sampel*100)}
-      ${compRow('Nut Pecah (Np)',gen.np/gen.sampel*100)}
-      ${compRow('Cangkang',gen.c/gen.sampel*100)}
-      ${dualRow('Total Dirt Content', res.dirt)} ${badge(res.dirtStatus)}
-      ${compRow('%IP/BK Kernel Silo', gen.bk/gen.sampel*100)}
+      ${padatanComponentRow('Nut Utuh (Nu)',nu)}
+      ${padatanComponentRow('Nut Pecah (Np)',np)}
+      ${padatanComponentRow('Cangkang',c)}
+      ${padatanTotalRow('Total Dirt Content',dirt,res.dirtExact)} ${badge(res.dirtStatus)}
+      ${padatanComponentRow('%IP/BK Kernel Silo',gen.bk/gen.sampel*100)}
       <div class="result-row"><span class="k">Moisture</span><span class="v">${fmt(gen.moist,'%')}</span> ${badge(res.moistStatus)}</div>
       <div class="target-note">Target latihan: Dirt 6,50%–7,00% · IP/BK 35,00%–36,15% · Moisture 6,20%–6,99%</div>`;
   } else {
