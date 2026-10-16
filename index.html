@@ -120,7 +120,9 @@
   .result-row:last-child{border-bottom:none;}
   .result-row .k{font-size:13px;color:var(--ink-muted);min-width:0;overflow-wrap:anywhere;}
   .result-row .v{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:15px;min-width:0;overflow-wrap:anywhere;text-align:right;}
-  .result-row.exact-row{display:none;}
+  .result-row .v small{display:block;margin-top:2px;font:400 10.5px/1.35 'Inter',system-ui,sans-serif;color:var(--ink-muted);}
+  .result-row .padatan-value{display:flex;flex-direction:column;align-items:flex-end;gap:2px;}
+  .result-row .padatan-value small{font-size:10.5px;}
   .result-row.rounded-row{background:var(--brand-soft);border:1px solid var(--ok-line);border-radius:8px;margin:4px 0;padding:9px 10px;}
   .result-row.rounded-row .k,.result-row.rounded-row .v{color:var(--brand-dark);font-weight:700;}
   .target-note{font-size:12px;color:var(--ink-muted);margin-top:10px;}
@@ -878,17 +880,28 @@ function localClockInputValue(date=new Date()){
   return `${String(date.getHours()).padStart(2,'0')}:00`;
 }
 function fmt(v, suffix){ return (v===null||v===undefined||isNaN(v)) ? '—' : (r2(v).toFixed(2) + (suffix||'')); }
+function fmtPadatan(v, suffix){
+  return (v===null||v===undefined||!Number.isFinite(Number(v))) ? '—' : (Number(v).toFixed(1) + (suffix||''));
+}
 function sumExact(...values){
   return values.reduce((acc, val) => {
     const n = Number(val);
     return acc + (Number.isFinite(n) ? n : 0);
   }, 0);
 }
-function sumRounded(...values){
-  return values.reduce((acc, val) => {
-    const n = Number(val);
-    return acc + (Number.isFinite(n) ? r2(n) : 0);
-  }, 0);
+function roundPadatanComponent(value){
+  if(value===null || value===undefined || !Number.isFinite(Number(value))) return null;
+  const scaled=Number(value)*10;
+  const lower=Math.floor(scaled);
+  const fraction=scaled-lower;
+  return (fraction>0.5+1e-9 ? lower+1 : lower)/10;
+}
+function sumPadatanComponents(...values){
+  return values.reduce((total,value)=>total+Math.round(Number(value)*10),0)/10;
+}
+function compactExact(value, decimals=4){
+  if(value===null || value===undefined || !Number.isFinite(Number(value))) return '—';
+  return Number(value).toFixed(decimals).replace(/\.?0+$/,'');
 }
 function stepperInputHtml(id, value, handler, placeholder){
   return `<div class="number-control">
@@ -911,20 +924,29 @@ function exact(v, dp){
   dp = dp===undefined ? 6 : dp;
   return (v===null||v===undefined||isNaN(v)) ? '—' : v.toFixed(dp);
 }
-// Baris komponen biasa — ditampilkan presisi tinggi (6 desimal) supaya kalau dijumlah manual, cocok persis.
+// Nilai utama dibuat ringkas; presisi rumus tetap tersedia sebagai detail kecil.
 function compRow(label, v, suffix){
   suffix = suffix===undefined ? '%' : suffix;
   if(v===null || v===undefined || isNaN(v)) return `<div class="result-row"><span class="k">${label}</span><span class="v">—</span></div>`;
-  const rounded = r2(v);
-  return `<div class="result-row"><span class="k">${label}</span><span class="v">${exact(v)}${suffix} (${fmt(v,suffix)})</span></div>`;
+  return `<div class="result-row"><span class="k">${label}</span><span class="v" title="Nilai rumus: ${exact(v,6)}${suffix}">${fmt(v,suffix)}<small>Nilai rumus: ${compactExact(v)}${suffix}</small></span></div>`;
 }
-// Baris hasil akhir/komposit — ditampilkan DUA kali: nilai pasti (6 desimal, tidak dibulatkan)
-// dan nilai dibulatkan 2 desimal (format standar untuk laporan/pembacaan target).
+function padatanComponentRow(label, value, suffix){
+  suffix=suffix===undefined?'%':suffix;
+  if(value===null || value===undefined || !Number.isFinite(Number(value))) return `<div class="result-row"><span class="k">${label}</span><span class="v">—</span></div>`;
+  const rounded=roundPadatanComponent(value);
+  const roundedValue=Math.abs(Number(value)-rounded)<1e-9 ? '' : `<small>Nilai rumus: ${compactExact(value)}${suffix}</small>`;
+  return `<div class="result-row"><span class="k">${label}</span><span class="v padatan-value" title="Nilai rumus presisi: ${exact(value,6)}${suffix}"><span>${rounded.toFixed(1)}${suffix}</span>${roundedValue}</span></div>`;
+}
+function padatanTotalRow(label, total, exactTotal, suffix, note){
+  suffix=suffix===undefined?'%':suffix;
+  return `<div class="result-row rounded-row"><span class="k">${label}</span><span class="v padatan-value" title="Nilai rumus presisi: ${exact(exactTotal,6)}${suffix}"><span>${Number(total).toFixed(1)}${suffix}</span></span></div>`;
+}
+// Hasil komposit ditampilkan ringkas dengan detail rumus hanya jika nilainya berbeda.
 function dualRow(label, v, suffix){
   suffix = suffix===undefined ? '%' : suffix;
-  return `
-    <div class="result-row exact-row"><span class="k">${label} — nilai pasti</span><span class="v">${exact(v)}${(v===null?'':suffix)}</span></div>
-    <div class="result-row rounded-row"><span class="k">${label} — hasil laporan (2 desimal)</span><span class="v">${fmt(v,suffix)}</span></div>`;
+  if(v===null || v===undefined || !Number.isFinite(Number(v))) return `<div class="result-row"><span class="k">${label}</span><span class="v">—</span></div>`;
+  const detail=Math.abs(Number(v)-r2(v))<1e-9 ? '' : `<small>Nilai rumus: ${compactExact(v)}${suffix}</small>`;
+  return `<div class="result-row rounded-row"><span class="k">${label}</span><span class="v" title="Nilai rumus presisi: ${exact(v,6)}${suffix}">${fmt(v,suffix)}${detail}</span></div>`;
 }
 
 function badge(status){
@@ -999,23 +1021,24 @@ const POINTS = {
     ],
     compute(v){
       const nu = v.nu/v.sampel*100, np = v.np/v.sampel*100;
-      const totalNut = sumExact(nu, np);
-      const totalNutRounded = sumRounded(nu, np);
+      const totalNutExact = sumExact(nu, np);
+      const nuRounded = roundPadatanComponent(nu), npRounded = roundPadatanComponent(np);
+      const totalNut = sumPadatanComponents(nuRounded, npRounded);
+      const efisiensiExact = 100 - totalNutExact;
       const efisiensi = 100 - totalNut;
       const bk = v.bk/v.sampel*100;
-      const effOk = r2(efisiensi) >= 98;
+      const effOk = r2(efisiensiExact) >= 98;
       const bkOk = r2(bk) >= 11 && r2(bk) <= 12.5;
       const status = (effOk && bkOk) ? 'ok' : 'warn';
-      return {unit:v.unit, nu, np, totalNut, totalNutRounded, efisiensi, bk, status, effOk, bkOk};
+      return {unit:v.unit, nu, np, nuRounded, npRounded, totalNut, totalNutExact, efisiensi, efisiensiExact, bk, status, effOk, bkOk};
     },
     render(res){
       return `
-        ${compRow('%Nu', res.nu)}
-        ${compRow('%Np', res.np)}
-        ${compRow('Total Nut', res.totalNut)}
-        ${compRow('Total Nut dari komponen dibulatkan', res.totalNutRounded)}
-        ${dualRow('Efisiensi', res.efisiensi)}
-        ${compRow('%BK (Broken Kernel)', res.bk)}
+        ${padatanComponentRow('%Nu', res.nu)}
+        ${padatanComponentRow('%Np', res.np)}
+        ${padatanTotalRow('Total Nut', res.totalNut, res.totalNutExact)}
+        ${padatanTotalRow('Efisiensi', res.efisiensi, res.efisiensiExact)}
+        ${padatanComponentRow('%BK (Broken Kernel)', res.bk)}
         <div class="result-row"><span class="k">Status</span>${badge(res.status)}</div>
         <div class="target-note">Target: Efisiensi ≥ 98.00% · Broken Kernel 11.00–12.50%</div>`;
     }
@@ -1031,18 +1054,18 @@ const POINTS = {
     ],
     compute(v){
       const nu=v.nu/v.sampel*100, np=v.np/v.sampel*100, c=v.c/v.sampel*100;
-      const totalDirt = sumExact(nu, np, c);
-      const totalDirtRounded = sumRounded(nu, np, c);
-      const status = r2(totalDirt) > 7.0 ? 'warn' : 'ok';
-      return {nu,np,c,totalDirt,totalDirtRounded,status};
+      const totalDirtExact = sumExact(nu, np, c);
+      const nuRounded=roundPadatanComponent(nu), npRounded=roundPadatanComponent(np), cRounded=roundPadatanComponent(c);
+      const totalDirt=sumPadatanComponents(nuRounded,npRounded,cRounded);
+      const status = r2(totalDirtExact) > 7.0 ? 'warn' : 'ok';
+      return {nu,np,c,nuRounded,npRounded,cRounded,totalDirt,totalDirtExact,status};
     },
     render(res){
       return `
-        ${compRow('%Nu', res.nu)}
-        ${compRow('%Np', res.np)}
-        ${compRow('%C (Cangkang)', res.c)}
-        ${dualRow('Total Dirt Content', res.totalDirt)}
-        ${compRow('Total Dirt dari komponen dibulatkan', res.totalDirtRounded)}
+        ${padatanComponentRow('%Nu', res.nu)}
+        ${padatanComponentRow('%Np', res.np)}
+        ${padatanComponentRow('%C (Cangkang)', res.c)}
+        ${padatanTotalRow('Total Dirt Content', res.totalDirt, res.totalDirtExact)}
         <div class="result-row"><span class="k">Status</span>${badge(res.status)}</div>
         <div class="target-note">Target: Dirt Content ≈ 6.50%–7.00%</div>`;
     }
@@ -1062,12 +1085,14 @@ const POINTS = {
       const np = v.np*0.55/v.sampel*100;
       const ku = v.ku/v.sampel*100;
       const kp = v.kp/v.sampel*100;
-      const totalLosses = sumExact(nu, np, ku, kp);
-      const totalLossesRounded = sumRounded(nu, np, ku, kp);
+      const totalLossesExact = sumExact(nu, np, ku, kp);
+      const nuRounded=roundPadatanComponent(nu), npRounded=roundPadatanComponent(np);
+      const kuRounded=roundPadatanComponent(ku), kpRounded=roundPadatanComponent(kp);
+      const totalLosses=sumPadatanComponents(nuRounded,npRounded,kuRounded,kpRounded);
       let status = 'ok';
-      if(r2(totalLosses) >= 0.90) status = 'danger';
-      else if(r2(totalLosses) > 0.80) status = 'warn';
-      return {nu,np,ku,kp,totalLosses,totalLossesRounded,status};
+      if(r2(totalLossesExact) >= 0.90) status = 'danger';
+      else if(r2(totalLossesExact) > 0.80) status = 'warn';
+      return {nu,np,ku,kp,nuRounded,npRounded,kuRounded,kpRounded,totalLosses,totalLossesExact,status};
     },
     render(res){
       let alertHtml = '';
@@ -1075,12 +1100,11 @@ const POINTS = {
         alertHtml = `<div class="danger-alert">⚠ Total losses ≥ 0.90% — wajib upload foto piring timbang dan notifikasi ke operator claybath.</div>`;
       }
       return `
-        ${compRow('%Nu (×0.45)', res.nu)}
-        ${compRow('%Np (×0.55)', res.np)}
-        ${compRow('%Ku', res.ku)}
-        ${compRow('%Kp', res.kp)}
-        ${dualRow('Total Losses', res.totalLosses)}
-        ${compRow('Total Losses dari komponen dibulatkan', res.totalLossesRounded)}
+        ${padatanComponentRow('%Nu (×0.45)', res.nu)}
+        ${padatanComponentRow('%Np (×0.55)', res.np)}
+        ${padatanComponentRow('%Ku', res.ku)}
+        ${padatanComponentRow('%Kp', res.kp)}
+        ${padatanTotalRow('Total Losses', res.totalLosses, res.totalLossesExact)}
         <div class="result-row"><span class="k">Status</span>${badge(res.status)}</div>
         <div class="target-note">Normal 0.50%–0.80% · Ambang wajib foto + lapor: ≥ 0.90%</div>
         ${alertHtml}`;
@@ -1374,10 +1398,22 @@ function onSiloNumberInput(id, field, val){
 }
 function calculateSilo(s){
   if(siloValidationError(s)) return null;
-  const nu = (s.nu||0)/s.sampel*100;
-  const np = (s.np||0)/s.sampel*100;
-  const c = (s.c||0)/s.sampel*100;
-  return {nu, np, c, dirt:sumExact(nu, np, c), bk:s.bk ? s.bk/s.sampel*100 : null};
+  const nuExact = (s.nu||0)/s.sampel*100;
+  const npExact = (s.np||0)/s.sampel*100;
+  const cExact = (s.c||0)/s.sampel*100;
+  const bkExact = s.bk ? s.bk/s.sampel*100 : null;
+  const nu=roundPadatanComponent(nuExact);
+  const np=roundPadatanComponent(npExact);
+  const c=roundPadatanComponent(cExact);
+  const dirtExact=sumExact(nuExact,npExact,cExact);
+  return {
+    nu,np,c,
+    nuExact,npExact,cExact,
+    dirt:sumPadatanComponents(nu,np,c),
+    dirtExact,
+    bk:bkExact===null?null:roundPadatanComponent(bkExact),
+    bkExact
+  };
 }
 function siloHasDirtInput(s){
   return ['sampel','nu','np','c','bk'].some(field=>s[field]!==null && s[field]!==undefined && s[field]!=='');
@@ -1411,14 +1447,14 @@ function siloCalcHtml(s){
   }
   const result = isDirt && siloHasDirtInput(s) ? calculateSilo(s) : null;
   if(result){
-    const dirtStatus = r2(result.dirt) <= 7.0 ? 'ok' : 'warn';
+    const dirtStatus = r2(result.dirtExact) <= 7.0 ? 'ok' : 'warn';
     const moistStatus = s.moist!==null ? (r2(s.moist)<=7.0?'ok':'warn') : null;
     return `
-      ${dualRow('Nut Utuh', result.nu)}
-      ${dualRow('Nut Pecah', result.np)}
-      ${dualRow('Cangkang', result.c)}
-      ${dualRow('Total Kotoran (Dirt)', result.dirt)} ${badge(dirtStatus)}
-      ${result.bk!==null?compRow('%BK', result.bk):''}
+      ${padatanComponentRow('Nut Utuh', result.nuExact)}
+      ${padatanComponentRow('Nut Pecah', result.npExact)}
+      ${padatanComponentRow('Cangkang', result.cExact)}
+      ${padatanTotalRow('Total Kotoran (Dirt)', result.dirt, result.dirtExact)} ${badge(dirtStatus)}
+      ${result.bkExact!==null?padatanComponentRow('%BK', result.bkExact):''}
       ${s.moist!==null?`<div class="result-row"><span class="k">Moisture</span><span class="v">${fmt(s.moist,'%')}</span> ${badge(moistStatus)}</div>`:''}
       <div class="acak-report">
         <div class="sample-report-head">
@@ -1816,17 +1852,29 @@ function getFormulaChecks(){
   const cake = pcCompute({sampel:100, nu:40, np:10, c:20, ku:25, kp:5});
   const sulfit = (2 * 0.0125 * 50 * 1000) / 20;
   const ffa = (5 * 25.6 * 0.1035) / 4;
+  const exactTenthBoundary = roundPadatanComponent(5.5);
+  const componentRounding = roundPadatanComponent(5.5023);
+  const exactHalfBoundary = roundPadatanComponent(6.15);
+  const aboveHalfBoundary = roundPadatanComponent(6.156);
+  const aboveHalfWithTrailingZeroes = roundPadatanComponent(6.56);
+  const roundedComponentSum = sumPadatanComponents(5.5,3.4,0.6);
 
   return [
     formulaCheck('Ripple Mill — efisiensi', '100 − ((Nu ÷ sampel × 100) + (Np ÷ sampel × 100))', ripple.efisiensi, 98.5, 'Nu=1 g, Np=0.5 g, sampel=100 g.'),
     formulaCheck('Ripple Mill — Broken Kernel', 'BK ÷ sampel × 100', ripple.bk, 11.5, 'BK=11.5 g, sampel=100 g.'),
     formulaCheck('Inti Basah — total dirt', 'Σ(Nu, Np, C) ÷ sampel × 100', inti.totalDirt, 6.5, 'Nu=2 g, Np=1.5 g, C=3 g, sampel=100 g.'),
-    formulaCheck('S-Claybath — total losses', 'Σ(Nu×0.45, Np×0.55, Ku, Kp) ÷ sampel × 100', clay.totalLosses, 1.3, 'Nu=1 g, Np=1 g, Ku=0.2 g, Kp=0.1 g, sampel=100 g.'),
+    formulaCheck('S-Claybath — total losses', 'Σ hasil pembulatan komponen ke 0,1%', clay.totalLosses, 1.2, 'Nu=1 g, Np=1 g, Ku=0.2 g, Kp=0.1 g, sampel=100 g.'),
     formulaCheck('LTDS I — losses', 'IP ÷ sampel × 100', ltds1.losses, 0.1, 'IP=0.2 g, sampel=200 g.'),
     formulaCheck('LTDS II — losses', 'IP ÷ sampel × 100', ltds2.losses, 0.4, 'IP=0.8 g, sampel=200 g.'),
     formulaCheck('F.Cyclone — line 1', 'IP line 1 ÷ sampel line 1 × 100', cyclone.line1, 0.5, 'IP1=0.5 g, sampel1=100 g.'),
     formulaCheck('F.Cyclone — line 2', 'IP line 2 ÷ sampel line 2 × 100', cyclone.line2, 0.5, 'IP2=1 g, sampel2=200 g.'),
     formulaCheck('Kernel Silo — dirt', 'Σ(Nu, Np, C) ÷ sampel × 100', siloDirt, 6, 'Nu=2 g, Np=1 g, C=3 g, sampel=100 g.'),
+    formulaCheck('Pembulatan tepat satu desimal', '5,5000% tetap 5,5%', exactTenthBoundary, 5.5, 'Angka tepat pada batas sepersepuluh tidak dinaikkan.'),
+    formulaCheck('Pembulatan di bawah titik tengah', '5,5023% menjadi 5,5%', componentRounding, 5.5, 'Nilai di bawah titik tengah tetap pada sepersepuluh terdekat.'),
+    formulaCheck('Pembulatan tepat pada titik tengah', '6,15000% menjadi 6,1%', exactHalfBoundary, 6.1, 'Titik tengah tepat tidak dinaikkan.'),
+    formulaCheck('Pembulatan di atas titik tengah', '6,15600% menjadi 6,2%', aboveHalfBoundary, 6.2, 'Nilai di atas titik tengah dibulatkan naik.'),
+    formulaCheck('Pembulatan dengan nol di belakang', '6,56000% menjadi 6,6%', aboveHalfWithTrailingZeroes, 6.6, 'Nol di belakang tidak mengubah hasil.'),
+    formulaCheck('Jumlah komponen Padatan', '5,5 + 3,4 + 0,6 tanpa pembulatan ulang', roundedComponentSum, 9.5, 'Total merupakan penjumlahan langsung dari hasil komponen yang sudah dibulatkan.'),
     formulaCheck('Press Cake — total nut', 'Σ(Nu, Np, C, Ku, Kp) ÷ sampel × 100', cake.totalNutPct, 100, 'Total komponen=100 g, sampel=100 g.'),
     formulaCheck('Sulfit — kadar ppm', 'Titrasi × 0.0125 × faktor × 1000 ÷ volume sampel', sulfit, 62.5, 'Titrasi=2, faktor=50, volume sampel=20.'),
     formulaCheck('FFA — persen asam lemak', 'Titrasi × konstanta × normalitas ÷ berat sampel', ffa, 3.312, 'Titrasi=5, konstanta=25.6, normalitas=0.1035, sampel=4 g.')
@@ -1920,12 +1968,12 @@ function renderSessionChips(){
   chips.push(chipHtml('LTDS II', s.ltds2 ? fmt(s.ltds2.losses,'%') : null));
   chips.push(chipHtml('F.Cyclone L1', s.fcyclone.line1!==null ? fmt(s.fcyclone.line1,'%') : null));
   chips.push(chipHtml('F.Cyclone L2', s.fcyclone.line2!==null ? fmt(s.fcyclone.line2,'%') : null));
-  chips.push(chipHtml('W.S.Claybath', s.claybath ? fmt(s.claybath.totalLosses,'%') : null));
-  chips.push(chipHtml('Inti Basah (Dirt)', s.intiBasah ? fmt(s.intiBasah.totalDirt,'%') : null));
-  chips.push(chipHtml('Ripple Mill — Efisiensi', s.ripple ? fmt(s.ripple.efisiensi,'%') : null));
-  chips.push(chipHtml('Ripple Mill — Broken', s.ripple ? fmt(s.ripple.bk,'%') : null));
+  chips.push(chipHtml('W.S.Claybath', s.claybath ? fmtPadatan(s.claybath.totalLosses,'%') : null));
+  chips.push(chipHtml('Inti Basah (Dirt)', s.intiBasah ? fmtPadatan(s.intiBasah.totalDirt,'%') : null));
+  chips.push(chipHtml('Ripple Mill — Efisiensi', s.ripple ? fmtPadatan(s.ripple.efisiensi,'%') : null));
+  chips.push(chipHtml('Ripple Mill — Broken', s.ripple ? fmtPadatan(roundPadatanComponent(s.ripple.bk),'%') : null));
   s.kernelSilo.forEach((k,i) => {
-    if(k.dirt!==null) chips.push(chipHtml(`Kernel Silo ${k.no||i+1} — Dirt`, fmt(k.dirt,'%')));
+    if(k.dirt!==null) chips.push(chipHtml(`Kernel Silo ${k.no||i+1} — Dirt`, fmtPadatan(k.dirt,'%')));
     if(k.moist!==null) chips.push(chipHtml(`Kernel Silo ${k.no||i+1} — Moist`, fmt(k.moist,'%')));
   });
   document.getElementById('sessionChips').innerHTML = chips.join('');
@@ -2000,27 +2048,27 @@ function buildReport(){
   lines.push(`LTDS 2       Line 1 : ${s.ltds2?fmt(s.ltds2.losses):'-'}`);
   lines.push(`F.Cyclone  Line 1 : ${s.fcyclone.line1!==null?fmt(s.fcyclone.line1):'-'}`);
   lines.push(`F.Cyclone  Line 2 : ${s.fcyclone.line2!==null?fmt(s.fcyclone.line2):'-'}`);
-  lines.push(`W.S.Clay    Line 1 : ${s.claybath?fmt(s.claybath.totalLosses):'-'}`);
+  lines.push(`W.S.Clay    Line 1 : ${s.claybath?fmtPadatan(s.claybath.totalLosses):'-'}`);
   lines.push('');
-  lines.push(`Inti Basah : ${s.intiBasah?fmt(s.intiBasah.totalDirt):'-'}`);
+  lines.push(`Inti Basah : ${s.intiBasah?fmtPadatan(s.intiBasah.totalDirt):'-'}`);
   lines.push('');
   lines.push(`Pengiriman Kernel Produksi *(Bunker ${bunkerGroup})*`);
   moistSilos.forEach(k => {
     lines.push(`*Kernel silo ${k.no||''}*`);
     if(Number.isFinite(k.nu) && Number.isFinite(k.np) && Number.isFinite(k.c)){
-      lines.push(`Nut Utuh : ${fmt(k.nu,'%')}`);
-      lines.push(`Nut Pecah : ${fmt(k.np,'%')}`);
-      lines.push(`Cangkang : ${fmt(k.c,'%')}`);
+      lines.push(`Nut Utuh : ${fmtPadatan(k.nu,'%')}`);
+      lines.push(`Nut Pecah : ${fmtPadatan(k.np,'%')}`);
+      lines.push(`Cangkang : ${fmtPadatan(k.c,'%')}`);
     }
-    if(k.dirt!==null) lines.push(`Total Kotoran : ${fmt(k.dirt,'%')}`);
+    if(k.dirt!==null) lines.push(`Total Kotoran : ${fmtPadatan(k.dirt,'%')}`);
     lines.push(`Moist${k.dirt!==null?'.':''} : ${k.moist!==null?fmt(k.moist):''}`);
-    if(k.bk!==null) lines.push(`Broken : ${fmt(k.bk,'%')}`);
+    if(k.bk!==null) lines.push(`Broken : ${fmtPadatan(k.bk,'%')}`);
   });
   lines.push('');
   if(s.ripple){
     lines.push(`*Ripple Mill ${s.ripple.unit||''}*`);
-    lines.push(`Efisiensi : ${fmt(s.ripple.efisiensi)}`);
-    lines.push(`Broken   : ${fmt(s.ripple.bk)}`);
+    lines.push(`Efisiensi : ${fmtPadatan(s.ripple.efisiensi)}`);
+    lines.push(`Broken   : ${fmtPadatan(roundPadatanComponent(s.ripple.bk))}`);
     lines.push('');
   }
   const note = document.getElementById('noteField').value;
@@ -3091,6 +3139,17 @@ const ACAK_ORDER = ['ripple','intiBasah','claybath','ltds1','ltds2','fcyclone','
 
 function rand(min,max){ return Math.random()*(max-min)+min; }
 function randomInputWeight(grams){ return Number(grams.toFixed(1)); }
+function weightTenthsForPercentRange(sample,minPercent,maxPercent){
+  if(!Number.isFinite(sample) || sample<=0) return null;
+  const min=Math.ceil(minPercent*sample/10-1e-9);
+  const max=Math.floor(maxPercent*sample/10+1e-9);
+  return max<min ? null : {min,max};
+}
+function randomWeightForPercentRange(sample,minPercent,maxPercent){
+  const range=weightTenthsForPercentRange(sample,minPercent,maxPercent);
+  if(!range) return null;
+  return Number((Math.floor(rand(range.min,range.max+1))/10).toFixed(1));
+}
 function componentWeights(totalPct, sample, options){
   const shellPct = rand(options.shellMin, Math.min(options.shellMax,totalPct-options.minimumNutPct));
   const remainingPct = totalPct-shellPct;
@@ -3106,10 +3165,10 @@ const ACAK_SAFE_NOTES = {
   ripple:'Rentang aman latihan: efisiensi 98.10–99.40% · BK 11.10–12.40%.',
   intiBasah:'Rentang aman latihan: total dirt 6.50–6.95%; Nu dan Np bervariasi, cangkang dominan sekitar 4.50–5.50% sampel.',
   claybath:'Rentang aman latihan: total losses 0.55–0.78% setelah faktor Nu ×0.45 dan Np ×0.55 dihitung.',
-  ltds1:'Target latihan: losses ≤ 0.10%; berat menyesuaikan ketelitian timbangan 0,1 g.',
+  ltds1:'Target latihan: losses 0,07–0,09%; berat IP dibulatkan ke 0,1 g, sehingga rentang yang bisa dicapai bergantung pada berat sampel.',
   ltds2:'Target latihan: losses ≤ 0.45%; berat menyesuaikan ketelitian timbangan 0,1 g.',
   fcyclone:'Rentang aman latihan: Line 1 dan Line 2 masing-masing 0.77–0.86%.',
-  kernelSilo:'Rentang aman latihan: total dirt 6.50–6.95%, cangkang 4.50–5.50% sampel, moisture 5.20–6.80%.'
+  kernelSilo:'Rentang aman latihan: total dirt 6,50–6,95%, cangkang 4,50–5,50% sampel, IP/BK 35,00–36,15%, moisture 6,20–6,99%.'
 };
 
 // Generator berat komponen yang dirancang agar hasil masuk akal dan masih
@@ -3148,12 +3207,10 @@ const ACAK_GENERATORS = {
     };
   },
   ltds1(sampel){
-    const losses = rand(0.07, 0.09);
-    return {sampel,ip:randomInputWeight(losses*sampel/100)};
+    return {sampel,ip:randomWeightForPercentRange(sampel,0.07,0.09)};
   },
   ltds2(sampel){
-    const losses = rand(0.37, 0.42);
-    return {sampel,ip:randomInputWeight(losses*sampel/100)};
+    return {sampel,ip:randomWeightForPercentRange(sampel,0.37,0.42)};
   },
   fcyclone(sampel1, sampel2){
     const line1Pct = rand(0.77, 0.86);
@@ -3171,8 +3228,8 @@ const ACAK_GENERATORS = {
     return {
       sampel,
       ...components,
-      bk: randomInputWeight(rand(0.4,5.2)*sampel/100),
-      moist: r2(rand(5.2,6.8))
+      bk: randomWeightForPercentRange(sampel,35,36.15),
+      moist: Math.floor(rand(620,700))/100
     };
   }
 };
@@ -3244,12 +3301,13 @@ function isAcakResultSafe(key,res,gen){
   if(key==='ripple') return res.efisiensi>=98.1 && res.efisiensi<=99.4 && res.bk>=11.1 && res.bk<=12.4;
   if(key==='intiBasah') return res.totalDirt>=6.5 && res.totalDirt<=6.95;
   if(key==='claybath') return res.totalLosses>=0.55 && res.totalLosses<=0.78;
-  if(key==='ltds1') return res.losses>=0.07 && res.losses<=0.1;
+  if(key==='ltds1') return res.losses>=0.07 && res.losses<=0.09;
   if(key==='ltds2') return res.losses>=0.37 && res.losses<=0.45;
   if(key==='fcyclone') return res.line1>=0.77 && res.line1<=0.86 && res.line2>=0.77 && res.line2<=0.86;
   if(key==='kernelSilo'){
     const dirt=sumExact(gen.nu,gen.np,gen.c)/gen.sampel*100;
-    return dirt>=6.5 && dirt<=6.95 && gen.moist<=7;
+    const ipBk=gen.bk/gen.sampel*100;
+    return dirt>=6.5 && dirt<=6.95 && ipBk>=35 && ipBk<=36.15 && gen.moist>=6.2 && gen.moist<=6.99;
   }
   return false;
 }
@@ -3258,42 +3316,43 @@ function acakReportPercent(weight,sample,factor){
   return weight*(factor===undefined?1:factor)/sample*100;
 }
 
-function acakReportComponent(label,weight,sample,connector,factor){
+function acakReportComponent(label,weight,sample,connector,factor,roundPercentUp){
   const mass=acakReportWeight(weight,sample);
   const percent=acakReportPercent(weight,sample,factor);
-  return `${label.padEnd(5)} ${mass.text.padStart(8)} / ${acakNumber(percent).padStart(5)} ${connector||''}`.trimEnd();
+  const percentText=roundPercentUp ? roundPadatanComponent(percent).toFixed(1) : acakNumber(percent);
+  return `${label.padEnd(5)} ${mass.text.padStart(8)} / ${percentText.padStart(5)} ${connector||''}`.trimEnd();
 }
 
 function buildAcakReport(key,gen,res){
   const border='----------------------------------------------';
   let lines=[];
   if(key==='ripple'){
-    const totalNut=sumExact(acakReportPercent(gen.nu,gen.sampel),acakReportPercent(gen.np,gen.sampel));
+    const totalNut=sumPadatanComponents(roundPadatanComponent(acakReportPercent(gen.nu,gen.sampel)),roundPadatanComponent(acakReportPercent(gen.np,gen.sampel)));
     lines=[`Ripple Mill     ${acakNumber(gen.sampel,1)}`,
-      acakReportComponent('Nu',gen.nu,gen.sampel,'\\'),
-      `${acakReportComponent('Np',gen.np,gen.sampel,'|')} ${acakNumber(totalNut)} (Efisiensi: ${acakNumber(100-totalNut)}%)`,
+      acakReportComponent('Nu',gen.nu,gen.sampel,'\\',undefined,true),
+      `${acakReportComponent('Np',gen.np,gen.sampel,'|',undefined,true)} ${totalNut.toFixed(1)} (Efisiensi: ${(100-totalNut).toFixed(1)}%)`,
       acakReportComponent('BK',gen.bk,gen.sampel)];
   } else if(key==='intiBasah'){
-    const dirt=sumExact(...['nu','np','c'].map(field=>acakReportPercent(gen[field],gen.sampel)));
+    const dirt=sumPadatanComponents(...['nu','np','c'].map(field=>roundPadatanComponent(acakReportPercent(gen[field],gen.sampel))));
     lines=[`Inti Basah      ${acakNumber(gen.sampel,1)}`,
-      acakReportComponent('Nu',gen.nu,gen.sampel,'\\'),
-      `${acakReportComponent('Np',gen.np,gen.sampel,'|')} ${acakNumber(dirt)}`,
-      acakReportComponent('C',gen.c,gen.sampel,'/')];
+      acakReportComponent('Nu',gen.nu,gen.sampel,'\\',undefined,true),
+      `${acakReportComponent('Np',gen.np,gen.sampel,'|',undefined,true)} ${dirt.toFixed(1)}`,
+      acakReportComponent('C',gen.c,gen.sampel,'/',undefined,true)];
   } else if(key==='kernelSilo'){
-    const dirt=sumExact(...['nu','np','c'].map(field=>acakReportPercent(gen[field],gen.sampel)));
+    const dirt=sumPadatanComponents(...['nu','np','c'].map(field=>roundPadatanComponent(acakReportPercent(gen[field],gen.sampel))));
     lines=[`K. Silo         ${acakNumber(gen.sampel,1)}`,
-      acakReportComponent('Nu',gen.nu,gen.sampel,'\\'),
-      `${acakReportComponent('Np',gen.np,gen.sampel,'|')} ${acakNumber(dirt)}`,
-      acakReportComponent('C',gen.c,gen.sampel,'/'),
-      ...(gen.bk===null || gen.bk===undefined || gen.bk==='' ? [] : [acakReportComponent('IP',gen.bk,gen.sampel)]),
+      acakReportComponent('Nu',gen.nu,gen.sampel,'\\',undefined,true),
+      `${acakReportComponent('Np',gen.np,gen.sampel,'|',undefined,true)} ${dirt.toFixed(1)}`,
+      acakReportComponent('C',gen.c,gen.sampel,'/',undefined,true),
+      ...(gen.bk===null || gen.bk===undefined || gen.bk==='' ? [] : [acakReportComponent('IP/BK',gen.bk,gen.sampel)]),
       ...(gen.moist===null || gen.moist===undefined || gen.moist==='' ? [] : [`M               ${acakNumber(gen.moist)}`])];
   } else if(key==='claybath'){
-    const losses=sumExact(acakReportPercent(gen.nu,gen.sampel,0.45),acakReportPercent(gen.np,gen.sampel,0.55),acakReportPercent(gen.ku,gen.sampel),acakReportPercent(gen.kp,gen.sampel));
+    const losses=sumPadatanComponents(roundPadatanComponent(acakReportPercent(gen.nu,gen.sampel,0.45)),roundPadatanComponent(acakReportPercent(gen.np,gen.sampel,0.55)),roundPadatanComponent(acakReportPercent(gen.ku,gen.sampel)),roundPadatanComponent(acakReportPercent(gen.kp,gen.sampel)));
     lines=[`S-Claybath      ${acakNumber(gen.sampel,1)}`,
-      acakReportComponent('Nu',gen.nu,gen.sampel,'\\',0.45),
-      `${acakReportComponent('Np',gen.np,gen.sampel,'|',0.55)} ${acakNumber(losses)}`,
-      acakReportComponent('Ku',gen.ku,gen.sampel,'|'),
-      acakReportComponent('Kp',gen.kp,gen.sampel,'/')];
+      acakReportComponent('Nu',gen.nu,gen.sampel,'\\',0.45,true),
+      `${acakReportComponent('Np',gen.np,gen.sampel,'|',0.55,true)} ${losses.toFixed(1)}`,
+      acakReportComponent('Ku',gen.ku,gen.sampel,'|',undefined,true),
+      acakReportComponent('Kp',gen.kp,gen.sampel,'/',undefined,true)];
   } else if(key==='ltds1' || key==='ltds2'){
     lines=[`${key==='ltds1'?'LTDS I':'LTDS II'}          ${acakNumber(gen.sampel,1)}`,
       acakReportComponent('IP',gen.ip,gen.sampel,'/'),
@@ -3329,17 +3388,38 @@ function runAcak(){
     const sampelEl = document.getElementById('acakSampel');
     const sampel = n(sampelEl.value);
     if(!sampel || sampel <= 0){ alert('Isi berat sampel (gram) dulu, harus lebih dari 0.'); return; }
+    if(key==='ltds1' && !weightTenthsForPercentRange(sampel,0.07,0.09)){
+      document.getElementById('acakResult').innerHTML = '<div class="danger-alert">Berat sampel ini tidak memungkinkan losses LTDS I 0,07–0,09% dengan ketelitian berat IP 0,1 g. Ubah berat sampel agar ada berat IP 0,1 g yang masuk rentang.</div>';
+      document.getElementById('acakInputsUsed').style.display='none';
+      document.getElementById('acakReportWrap').style.display='none';
+      return;
+    }
+    if(key==='kernelSilo' && !weightTenthsForPercentRange(sampel,35,36.15)){
+      document.getElementById('acakResult').innerHTML = '<div class="danger-alert">Berat sampel ini tidak memungkinkan IP/BK Kernel Silo 35,00–36,15% dengan ketelitian berat 0,1 g. Ubah berat sampel agar ada berat IP/BK 0,1 g yang masuk rentang.</div>';
+      document.getElementById('acakInputsUsed').style.display='none';
+      document.getElementById('acakReportWrap').style.display='none';
+      return;
+    }
     generate = () => ACAK_GENERATORS[key](sampel);
   }
 
-  let gen, res;
+  let gen, res, safe=false;
   for(let attempt=0;attempt<100;attempt++){
     gen=generate();
     if(key==='kernelSilo'){
       const dirt=sumExact(gen.nu,gen.np,gen.c)/gen.sampel*100;
       res={dirt,dirtStatus:dirt<=7?'ok':'warn',moistStatus:gen.moist<=7?'ok':'warn'};
     }else res=def.compute(gen);
-    if(isAcakResultSafe(key,res,gen)) break;
+    if(isAcakResultSafe(key,res,gen)){
+      safe=true;
+      break;
+    }
+  }
+  if(!safe){
+    document.getElementById('acakResult').innerHTML = '<div class="danger-alert">Tidak ditemukan kombinasi berat 0,1 g yang memenuhi rentang aman untuk berat sampel ini. Ubah berat sampel lalu coba lagi.</div>';
+    document.getElementById('acakInputsUsed').style.display='none';
+    document.getElementById('acakReportWrap').style.display='none';
+    return;
   }
   if(key === 'kernelSilo'){
     document.getElementById('acakResult').innerHTML = `
@@ -3347,9 +3427,9 @@ function runAcak(){
       ${compRow('Nut Pecah (Np)',gen.np/gen.sampel*100)}
       ${compRow('Cangkang',gen.c/gen.sampel*100)}
       ${dualRow('Total Dirt Content', res.dirt)} ${badge(res.dirtStatus)}
-      ${compRow('%BK', gen.bk/gen.sampel*100)}
+      ${compRow('%IP/BK Kernel Silo', gen.bk/gen.sampel*100)}
       <div class="result-row"><span class="k">Moisture</span><span class="v">${fmt(gen.moist,'%')}</span> ${badge(res.moistStatus)}</div>
-      <div class="target-note">Target latihan: Dirt 6.50%–7.00% · Moisture ≤ 7.00%</div>`;
+      <div class="target-note">Target latihan: Dirt 6,50%–7,00% · IP/BK 35,00%–36,15% · Moisture 6,20%–6,99%</div>`;
   } else {
     if(key === 'ltds1' || key === 'ltds2'){
       document.getElementById('acakResult').innerHTML = `
