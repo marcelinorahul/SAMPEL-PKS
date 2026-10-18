@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>SiLabor PKS</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#F4F7F5;
@@ -63,6 +61,7 @@
   }
   .top-tab.active{background:#fff;color:var(--brand-dark);}
   .top-tab .soon{display:block;font-weight:500;font-size:10.5px;opacity:.75;margin-top:1px;}
+  .offline-status{flex:1 0 100%;font-size:11.5px;color:#DCEFE8;text-align:right;}
 
   main.card-shell{position:relative;z-index:1;min-width:0;}
   .panel{
@@ -75,6 +74,7 @@
   .smart-report-panel{border-top:4px solid var(--accent);}
   .smart-report-input textarea{min-height:250px;font:13px/1.55 'JetBrains Mono',monospace;}
   .smart-report-status{margin-top:10px;color:var(--ink-muted);font-size:12.5px;}
+  .smart-report-output{margin-top:16px;}
   .oil-loss-panel{border-top:4px solid var(--brand);}
   .oil-loss-input textarea{min-height:300px;font:12.5px/1.5 'JetBrains Mono',monospace;}
   .oil-loss-status{margin-top:10px;color:var(--ink-muted);font-size:12.5px;}
@@ -380,6 +380,7 @@
       <button class="top-tab" id="tabBtnRumus" onclick="switchMenu('rumus')">Rumus</button>             
       <button class="top-tab" id="tabBtnUsb" onclick="switchMenu('usb')">USB/FLEB</button>
     </div>
+    <div class="offline-status" id="offlineStatus" role="status" aria-live="polite">Menyiapkan akses offline…</div>
   </div>
 </header>
 
@@ -584,16 +585,40 @@
     <div class="panel smart-report-panel">
       <div class="panel-head">
         <h2>Laporan Pintar</h2>
-        <span class="hint">Tempel laporan teks untuk mengisi rekap per 2 jam dan grafik</span>
+        <span class="hint">Tempel satu atau beberapa laporan 2 jam untuk dideteksi dan disimpan ke rekap</span>
       </div>
       <div class="field smart-report-input">
         <label for="smartReportText">Teks laporan</label>
-        <textarea id="smartReportText" class="manual" rows="12" placeholder="Tempel laporan lengkap di sini, termasuk tanggal dan Laporan Jam ..."></textarea>
+        <textarea id="smartReportText" class="manual" rows="8" placeholder="Tempel satu atau beberapa laporan WhatsApp. Setiap laporan perlu memuat tanggal dan Laporan Jam HH:MM."></textarea>
       </div>
       <div class="smart-report-status" id="smartReportStatus" aria-live="polite">Laporan akan dideteksi saat disimpan.</div>
       <div class="row-actions">
         <button class="btn primary" onclick="saveSmartReport()">Deteksi &amp; Simpan ke Rekap</button>
         <button class="btn ghost" onclick="clearSmartReport()">Kosongkan</button>
+      </div>
+    </div>
+
+    <div class="panel smart-report-panel">
+      <div class="panel-head">
+        <h2>Laporan Rata-Rata Harian</h2>
+        <span class="hint">Laporan pagi: sampling pukul 08:00 hari sebelumnya sampai 04:00 pada tanggal laporan</span>
+      </div>
+      <div class="row-actions" style="justify-content:flex-start;align-items:end;">
+        <div class="field" style="min-width:min(260px,100%);">
+          <label for="dailyAverageDate">Tanggal laporan pagi</label>
+          <select id="dailyAverageDate"><option value="">Belum ada tanggal tersimpan</option></select>
+        </div>
+        <button class="btn ghost" onclick="buildDailyAverageReport('solid')">Hitung Padatan</button>
+        <button class="btn ghost" onclick="buildDailyAverageReport('liquid')">Hitung Cairan</button>
+        <button class="btn primary" onclick="buildDailyAverageReport('all')">Hitung Semua</button>
+      </div>
+      <div id="dailyAverageReportWrap" class="smart-report-output" style="display:none;">
+        <div class="report-box" id="dailyAverageReport"></div>
+        <div class="smart-report-status" id="dailyAverageReportMeta"></div>
+        <div class="copy-row">
+          <button class="btn ghost small" onclick="copyDailyAverageReport()">Salin Format</button>
+          <button class="btn primary small" onclick="sendDailyAverageReportToWhatsApp()">Kirim Format ke WA</button>
+        </div>
       </div>
     </div>
 
@@ -2102,6 +2127,29 @@ function copyReport(){
   copyText(text, 'Laporan 2 Jam tersalin.');
 }
 
+function splitSmartReports(text){
+  const lines=String(text||'').split(/\r?\n/);
+  const dateHeading=/^(?:(?:senin|selasa|rabu|kamis|jum(?:'|a)?at|sabtu|minggu),?\s*)?\d{1,2}\s*[-/.]\s*\d{1,2}\s*[-/.]\s*\d{4}$/i;
+  const timeHeading=/Laporan\s+Jam\s+\d{1,2}:\d{2}/i;
+  const reports=[];
+  let currentDateLine='', activeLines=null;
+  lines.forEach(line=>{
+    const clean=line.replace(/[*_]/g,'').trim();
+    if(dateHeading.test(clean)){
+      currentDateLine=line;
+      return;
+    }
+    if(timeHeading.test(clean)){
+      if(activeLines) reports.push(activeLines.join('\n'));
+      activeLines=[...(currentDateLine?[currentDateLine]:[]),line];
+      return;
+    }
+    if(activeLines) activeLines.push(line);
+  });
+  if(activeLines) reports.push(activeLines.join('\n'));
+  return reports.length?reports:[String(text||'').trim()];
+}
+
 function parseSmartReport(text){
   const dateMatch = text.match(/(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{4})/);
   const timeMatch = text.match(/Laporan\s+Jam\s+(\d{1,2}):(\d{2})/i);
@@ -2156,13 +2204,15 @@ function parseSmartReport(text){
       return;
     }
     if(currentSilo){
+      let recognizedSiloValue=true;
       if(label.startsWith('moist')) currentSilo.moist=value;
       else if(label.startsWith('dirt') || label.startsWith('total kotoran')) currentSilo.dirt=value;
       else if(label.startsWith('broken')) currentSilo.bk=value;
       else if(label.startsWith('nut utuh')) currentSilo.nu=value;
       else if(label.startsWith('nut pecah')) currentSilo.np=value;
       else if(label.startsWith('cangkang')) currentSilo.c=value;
-      return;
+      else recognizedSiloValue=false;
+      if(recognizedSiloValue) return;
     }
     if(section==='temperatur'){
       const key=manualBySection.temperatur[label];
@@ -2202,30 +2252,201 @@ function parseSmartReport(text){
 function saveSmartReport(){
   const text=document.getElementById('smartReportText').value.trim();
   const status=document.getElementById('smartReportStatus');
-  const parsed=parseSmartReport(text);
-  if(parsed.error){ status.textContent=parsed.error; status.style.color='var(--danger-ink)'; return; }
-  const now=new Date(), silos=parsed.silos;
-  const dirtSilos=silos.filter(silo=>Number.isFinite(silo.dirt));
-  const entry={
-    id:`${parsed.date}_${parsed.clock}_smart`,date:parsed.date,clock:parsed.clock,
-    time:now.toLocaleString('id-ID'),savedAt:now.toISOString(),source:'smart-report',reportText:text,
-    ltds1:parsed.metrics.ltds1,ltds2:parsed.metrics.ltds2,fc1:parsed.metrics.fc1,fc2:parsed.metrics.fc2,
-    claybath:parsed.metrics.claybath,intiDirt:parsed.metrics.intiDirt,
-    kernelMoist:avg(silos.map(silo=>silo.moist)),kernelDirt:maxFinite(dirtSilos.map(silo=>silo.dirt)),
-    kernelNu:avg(dirtSilos.map(silo=>silo.nu)),kernelNp:avg(dirtSilos.map(silo=>silo.np)),kernelShell:avg(dirtSilos.map(silo=>silo.c)),
-    rippleEfficiency:parsed.metrics.rippleEfficiency,rippleBroken:parsed.metrics.rippleBroken,
-    ...parsed.manual,
-    note:parsed.note,bunkerGroup:'',pressUnit:parsed.pressUnit,bunchPressUnit:parsed.bunchPressUnit,session:parsed.session
-  };
-  const existingIndex=state.history.findIndex(item=>item.date===entry.date && item.clock===entry.clock);
-  if(existingIndex>=0){ entry.id=state.history[existingIndex].id; state.history[existingIndex]=entry; }
-  else state.history.push(entry);
-  recapFilterDate=entry.date;
+  const reports=splitSmartReports(text);
+  if(!text){ status.textContent='Tempel minimal satu laporan terlebih dahulu.'; status.style.color='var(--danger-ink)'; return; }
+  const parsedReports=reports.map(parseSmartReport);
+  const failedIndex=parsedReports.findIndex(parsed=>parsed.error);
+  if(failedIndex>=0){
+    status.textContent=reports.length>1?`Laporan ke-${failedIndex+1}: ${parsedReports[failedIndex].error}`:parsedReports[failedIndex].error;
+    status.style.color='var(--danger-ink)';
+    return;
+  }
+  const now=new Date();
+  let inserted=0, updated=0, totalValues=0, totalSilos=0;
+  parsedReports.forEach((parsed,index)=>{
+    const silos=parsed.silos;
+    const dirtSilos=silos.filter(silo=>Number.isFinite(silo.dirt));
+    const entry={
+      id:`${parsed.date}_${parsed.clock}_smart`,date:parsed.date,clock:parsed.clock,
+      time:now.toLocaleString('id-ID'),savedAt:now.toISOString(),source:'smart-report',reportText:reports[index],
+      ltds1:parsed.metrics.ltds1,ltds2:parsed.metrics.ltds2,fc1:parsed.metrics.fc1,fc2:parsed.metrics.fc2,
+      claybath:parsed.metrics.claybath,intiDirt:parsed.metrics.intiDirt,
+      kernelMoist:avg(silos.map(silo=>silo.moist)),kernelDirt:maxFinite(dirtSilos.map(silo=>silo.dirt)),
+      kernelNu:avg(dirtSilos.map(silo=>silo.nu)),kernelNp:avg(dirtSilos.map(silo=>silo.np)),kernelShell:avg(dirtSilos.map(silo=>silo.c)),
+      kernelBroken:avg(silos.map(silo=>silo.bk)),
+      rippleEfficiency:parsed.metrics.rippleEfficiency,rippleBroken:parsed.metrics.rippleBroken,
+      ...parsed.manual,
+      note:parsed.note,bunkerGroup:'',pressUnit:parsed.pressUnit,bunchPressUnit:parsed.bunchPressUnit,session:parsed.session
+    };
+    const existingIndex=state.history.findIndex(item=>item.date===entry.date && item.clock===entry.clock);
+    if(existingIndex>=0){ entry.id=state.history[existingIndex].id; state.history[existingIndex]=entry; updated++; }
+    else { state.history.push(entry); inserted++; }
+    totalValues+=Object.keys(parsed.manual).length+Object.values(parsed.metrics).filter(Number.isFinite).length;
+    totalSilos+=silos.length;
+  });
+  const lastParsed=parsedReports[parsedReports.length-1];
+  recapFilterDate=lastParsed.date;
   renderRecap();
+  const latestParsed=parsedReports.reduce((latest,parsed)=>{
+    const entry={date:parsed.date,clock:parsed.clock};
+    return !latest||dailyAverageEntryTimestamp(entry)>dailyAverageEntryTimestamp(latest)?entry:latest;
+  },null);
+  document.getElementById('dailyAverageDate').value=dailyAverageReportDateForEntry(latestParsed);
   const saved=saveDraft();
-  status.textContent=`Terdeteksi ${Object.keys(parsed.manual).length} nilai proses, ${silos.length} silo, tanggal ${recapDateLabel(entry.date)} jam ${entry.clock}. ${existingIndex>=0?'Rekaman pada jam yang sama diperbarui.':'Rekaman disimpan.'}`;
+  status.textContent=`Terdeteksi ${parsedReports.length} laporan, ${totalValues} nilai proses, dan ${totalSilos} data silo. ${inserted} laporan baru disimpan; ${updated} laporan dengan tanggal/jam sama diperbarui.`;
   status.style.color='var(--ok-ink)';
-  showToast(saved?'Laporan pintar tersimpan ke rekap harian.':'Laporan masuk ke rekap, tetapi penyimpanan browser gagal.');
+  showToast(saved?'Laporan pintar tersimpan ke rekap harian. Pilih jenis rata-rata untuk membuat format WA.':'Laporan masuk ke rekap, tetapi penyimpanan browser gagal.');
+}
+
+function dailyAverageValue(entries, key){
+  return avg(entries.map(entry=>entry[key]).filter(Number.isFinite));
+}
+
+function dailyAverageFromEntries(entries, keys){
+  return avg(entries.map(entry=>avg(keys.map(key=>entry[key]).filter(Number.isFinite))).filter(Number.isFinite));
+}
+
+function dailyAverageDateLabel(date){
+  const [year,month,day]=date.split('-').map(Number);
+  return new Date(year,month-1,day).toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+}
+
+function dailyAverageDateOffset(date, days){
+  const [year,month,day]=date.split('-').map(Number);
+  const shifted=new Date(Date.UTC(year,month-1,day+days));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth()+1).padStart(2,'0')}-${String(shifted.getUTCDate()).padStart(2,'0')}`;
+}
+
+function dailyAverageEntryTimestamp(entry){
+  const dateMatch=String(entry.date||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timeMatch=String(entry.clock||'').match(/^(\d{1,2}):(\d{2})$/);
+  if(!dateMatch||!timeMatch) return null;
+  const year=Number(dateMatch[1]),month=Number(dateMatch[2]),day=Number(dateMatch[3]);
+  const hour=Number(timeMatch[1]),minute=Number(timeMatch[2]);
+  if(month<1||month>12||day<1||day>31||hour>24||minute>59||(hour===24&&minute!==0)) return null;
+  const dateCheck=new Date(Date.UTC(year,month-1,day));
+  if(dateCheck.getUTCFullYear()!==year||dateCheck.getUTCMonth()!==month-1||dateCheck.getUTCDate()!==day) return null;
+  return Date.UTC(year,month-1,day,hour,minute);
+}
+
+function dailyAverageReportDateForEntry(entry){
+  const timestamp=dailyAverageEntryTimestamp(entry);
+  if(timestamp===null) return entry.date;
+  const [year,month,day]=entry.date.split('-').map(Number);
+  const localMinutes=Number(entry.clock.split(':')[0])*60+Number(entry.clock.split(':')[1]);
+  return localMinutes>=8*60?dailyAverageDateOffset(entry.date,1):`${String(year).padStart(4,'0')}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+}
+
+function dailyAverageEntriesForReportDate(date){
+  if(!date) return [];
+  const start=Date.UTC(...date.split('-').map(Number).map((part,index)=>index===1?part-1:part));
+  const startTime=start-24*60*60*1000+8*60*60*1000;
+  const endTime=start+4*60*60*1000;
+  return state.history.filter(entry=>{
+    const timestamp=dailyAverageEntryTimestamp(entry);
+    return timestamp!==null&&timestamp>=startTime&&timestamp<=endTime;
+  }).slice().sort((a,b)=>dailyAverageEntryTimestamp(a)-dailyAverageEntryTimestamp(b));
+}
+
+function dailyAverageText(value, decimals=2){
+  return Number.isFinite(value)?`${value.toFixed(decimals)}%`:'-';
+}
+
+function dailyAverageSection(title, lines){
+  return [`*${title}*`,...lines].join('\n');
+}
+
+function buildDailyAverageReport(type){
+  if(!['solid','liquid','all'].includes(type)) return;
+  const targetDate=document.getElementById('dailyAverageDate').value;
+  const entries=dailyAverageEntriesForReportDate(targetDate);
+  const wrap=document.getElementById('dailyAverageReportWrap');
+  const output=document.getElementById('dailyAverageReport');
+  if(!targetDate||entries.length===0){
+    wrap.style.display='none';
+    output.textContent='';
+    showToast('Tidak ada sampling pada rentang 08:00 hari sebelumnya hingga 04:00 tanggal laporan.');
+    return;
+  }
+  const value=(key,decimals=2)=>dailyAverageText(dailyAverageValue(entries,key),decimals);
+  const fcAverage=dailyAverageFromEntries(entries,['fc1','fc2']);
+  const kernelBroken=avg(entries.map(entry=>{
+    if(Number.isFinite(entry.kernelBroken)) return entry.kernelBroken;
+    return avg((entry.session?.kernelSilo||[]).map(silo=>silo.bk).filter(Number.isFinite));
+  }).filter(Number.isFinite));
+  const sections=[];
+  if(type==='liquid'||type==='all'){
+    sections.push(dailyAverageSection('CPO Produksi',[
+      `FFA     : ${value('sesudahFfa')}`,
+      `Moist  : ${value('sesudahMoist')}`,
+      `Dirt      : ${value('sesudahDirt',3)}`
+    ]));
+    ['1','2','3','4','D','E'].forEach(ost=>sections.push(dailyAverageSection(`OST ${ost}`,[
+      'FFA    : -',
+      'Moist : -',
+      'Dirt     : -'
+    ])));
+  }
+  if(type==='solid'||type==='all'){
+    sections.push(dailyAverageSection('Kualitas Kernel Produksi',[
+      `Moist                : ${value('kernelMoist')}`,
+      `Dirt                    : ${value('kernelDirt')}`,
+      `Broken Kernel  : ${dailyAverageText(kernelBroken)}`
+    ]));
+    sections.push(dailyAverageSection('Losses Kernel',[
+      `LTDS I            : ${value('ltds1')}`,
+      `LTDS II           : ${value('ltds2')}`,
+      `F. Cyclone     : ${dailyAverageText(fcAverage)}`,
+      `S. Claybath   : ${value('claybath')}`
+    ]));
+  }
+  if(type==='liquid'||type==='all'){
+    sections.push(dailyAverageSection('Komposisi COT',[
+      `Oil          : ${value('cotOil')}`,
+      `Emulsi   : ${value('cotEmulsi')}`,
+      `Moist     : ${value('cotMoist')}`,
+      `Dirt         : ${value('cotSludge')}`
+    ]));
+    sections.push([
+      'Note:',
+      'Moisture Bottom OST 1 = -',
+      'Moisture Bottom OST 2 = -',
+      'Moisture Bottom OST 3 = -',
+      'Moisture Bottom OST 4 = -',
+      'Moisture Bottom OST D = -',
+      'Moisture Bottom OST E = -'
+    ].join('\n'));
+  }
+  const title=type==='solid'?'Padatan':type==='liquid'?'Cairan':'Padatan & Cairan';
+  const report=[
+    'Selamat Pagi Pak',
+    '',
+    '*Berikut Hasil Kualitas Produksi*',
+    `*${dailyAverageDateLabel(targetDate)}*`,
+    `*Rata-Rata ${title}*`,
+    '',
+    sections.join('\n\n')
+  ].join('\n');
+  output.textContent=report;
+  wrap.style.display='block';
+  document.getElementById('dailyAverageReportMeta').textContent=`${title}: ${entries.length} sampling dalam rentang 08:00 ${recapDateLabel(dailyAverageDateOffset(targetDate,-1))} – 04:00 ${recapDateLabel(targetDate)}. Tiap parameter dibagi hanya dengan jumlah sampling yang mengisi nilainya; isian kosong tidak dianggap nol. OST dan Moisture Bottom OST ditampilkan "-" karena belum tersedia di laporan 2 jam.`;
+}
+
+function copyDailyAverageReport(){
+  const text=document.getElementById('dailyAverageReport').textContent;
+  if(text.trim()) copyText(text,'Laporan rata-rata harian tersalin.');
+}
+
+function sendDailyAverageReportToWhatsApp(){
+  let text=document.getElementById('dailyAverageReport').textContent.trim();
+  if(!text){
+    buildDailyAverageReport();
+    text=document.getElementById('dailyAverageReport').textContent.trim();
+    if(!text) return;
+  }
+  const number=(document.getElementById('waNumber').value||'').replace(/[^0-9]/g,'');
+  const url=number?`https://wa.me/${number}?text=${encodeURIComponent(text)}`:`https://wa.me/?text=${encodeURIComponent(text)}`;
+  window.open(url,'_blank','noopener');
 }
 
 function clearSmartReport(){
@@ -2626,6 +2847,7 @@ function saveSessionToRecap(){
     kernelNu: avg(dirtSilos.map(k => k.nu)),
     kernelNp: avg(dirtSilos.map(k => k.np)),
     kernelShell: avg(dirtSilos.map(k => k.c)),
+    kernelBroken: avg(silos.map(k => k.bk)),
     rippleEfficiency: s.ripple ? s.ripple.efisiensi : null,
     rippleBroken: s.ripple ? s.ripple.bk : null,
     note: document.getElementById('noteField').value,
@@ -2888,7 +3110,22 @@ function buildRecapContent(entries){
       </tr></thead><tbody>${tableRows}</tbody></table></div>`;
 }
 
+function updateDailyAverageDateOptions(){
+  const select=document.getElementById('dailyAverageDate');
+  if(!select) return;
+  const dates=[...new Set(state.history.flatMap(entry=>{
+    if(!entry.date) return [];
+    return [entry.date,dailyAverageReportDateForEntry(entry)];
+  }))].sort().reverse();
+  const previous=select.value;
+  select.innerHTML=dates.length
+    ?dates.map(date=>`<option value="${escapeHtml(date)}">${escapeHtml(recapDateLabel(date))}</option>`).join('')
+    :'<option value="">Belum ada tanggal tersimpan</option>';
+  select.value=dates.includes(previous)?previous:(dates[0]||'');
+}
+
 function renderRecap(){
+  updateDailyAverageDateOptions();
   const body = document.getElementById('recapBody');
   const datedHistory = [...new Set(state.history.map(entry=>entry.date).filter(Boolean))].sort().reverse();
   const hasLegacyHistory = state.history.some(entry=>!entry.date);
@@ -3605,6 +3842,39 @@ function initDefaults(){
   if(!clockInput.value) clockInput.value=localClockInputValue(now);
 }
 
+function updateOfflineStatus(){
+  const status=document.getElementById('offlineStatus');
+  if(!status) return;
+  if(!navigator.onLine){
+    status.textContent='Offline · kalkulator dan laporan tetap tersedia';
+  }else if(location.protocol==='file:'){
+    status.textContent='Mode file lokal · tersedia offline';
+  }else if(!window.isSecureContext || !('serviceWorker' in navigator)){
+    status.textContent='Akses offline setelah dibuka perlu HTTPS';
+  }else if(navigator.serviceWorker.controller){
+    status.textContent='Online · akses offline siap';
+  }else{
+    status.textContent='Online · menyiapkan akses offline';
+  }
+}
+
+function registerOfflineSupport(){
+  updateOfflineStatus();
+  if(location.protocol==='file:' || !window.isSecureContext || !('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.addEventListener('controllerchange',updateOfflineStatus);
+  navigator.serviceWorker.register('./service-worker.js')
+    .then(()=>navigator.serviceWorker.ready)
+    .then(updateOfflineStatus)
+    .catch(err=>{
+      console.warn('Mode offline tidak dapat disiapkan:',err);
+      const status=document.getElementById('offlineStatus');
+      if(status) status.textContent='Mode offline belum siap · periksa HTTPS dan izin browser';
+    });
+}
+
+window.addEventListener('online',updateOfflineStatus);
+window.addEventListener('offline',updateOfflineStatus);
+
 const restored = restoreDraft();
 renderPointTabs();
 renderPointBody();
@@ -3620,6 +3890,7 @@ if(restored){
     : 'Draft dipulihkan';
 }
 saveDraft();
+registerOfflineSupport();
 </script>
 </body>
 </html>
