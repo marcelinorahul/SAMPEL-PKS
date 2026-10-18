@@ -601,7 +601,7 @@
     <div class="panel smart-report-panel">
       <div class="panel-head">
         <h2>Laporan Rata-Rata Harian</h2>
-        <span class="hint">Laporan pagi: sampling pukul 08:00 hari sebelumnya sampai 04:00 pada tanggal laporan</span>
+        <span class="hint">Pilih tanggal laporan pagi untuk menghitung rata-rata sampling.</span>
       </div>
       <div class="row-actions" style="justify-content:flex-start;align-items:end;">
         <div class="field" style="min-width:min(260px,100%);">
@@ -2129,12 +2129,12 @@ function copyReport(){
 
 function splitSmartReports(text){
   const lines=String(text||'').split(/\r?\n/);
-  const dateHeading=/^(?:(?:senin|selasa|rabu|kamis|jum(?:'|a)?at|sabtu|minggu),?\s*)?\d{1,2}\s*[-/.]\s*\d{1,2}\s*[-/.]\s*\d{4}$/i;
+  const dateHeading=/\d{1,2}\s*[-\u2010-\u2015\u2212/.]\s*\d{1,2}\s*[-\u2010-\u2015\u2212/.]\s*\d{4}/;
   const timeHeading=/Laporan\s+Jam\s+\d{1,2}:\d{2}/i;
   const reports=[];
   let currentDateLine='', activeLines=null;
   lines.forEach(line=>{
-    const clean=line.replace(/[*_]/g,'').trim();
+    const clean=line.replace(/[*_]/g,'').replace(/[\u200B-\u200D\uFEFF]/g,'').trim();
     if(dateHeading.test(clean)){
       currentDateLine=line;
       return;
@@ -2151,8 +2151,9 @@ function splitSmartReports(text){
 }
 
 function parseSmartReport(text){
-  const dateMatch = text.match(/(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{4})/);
-  const timeMatch = text.match(/Laporan\s+Jam\s+(\d{1,2}):(\d{2})/i);
+  const normalizedText=String(text||'').replace(/[\u200B-\u200D\uFEFF]/g,'');
+  const dateMatch = normalizedText.match(/(\d{1,2})\s*[-\u2010-\u2015\u2212/.]\s*(\d{1,2})\s*[-\u2010-\u2015\u2212/.]\s*(\d{4})/);
+  const timeMatch = normalizedText.match(/Laporan\s+Jam\s+(\d{1,2}):(\d{2})/i);
   if(!dateMatch || !timeMatch) return {error:'Tanggal atau jam laporan tidak ditemukan. Sertakan format tanggal dan "Laporan Jam HH:MM".'};
   const day = Number(dateMatch[1]), month = Number(dateMatch[2]), year = Number(dateMatch[3]);
   const dateObject = new Date(year,month-1,day);
@@ -2167,8 +2168,8 @@ function parseSmartReport(text){
   const metrics = {ltds1:null,ltds2:null,fc1:null,fc2:null,claybath:null,intiDirt:null,rippleEfficiency:null,rippleBroken:null};
   let section = '', currentSilo = null, note = '', pressUnit = null, bunchPressUnit = null;
   const numberFrom = value => {
-    const match = value.trim().match(/^[-+]?\d+(?:[.,]\d+)?/);
-    return match ? Number(match[0].replace(',','.')) : null;
+    const match = value.trim().match(/^[-+]?\d+(?:\s*[.,]\s*\d+)?/);
+    return match ? Number(match[0].replace(/\s/g,'').replace(',','.')) : null;
   };
   const manualBySection = {
     'sebelum vacum':{moist:'sebelumVacumMoist'},
@@ -2179,7 +2180,7 @@ function parseSmartReport(text){
     'cst 2':{oil:'cst2Oil',emulsi:'cst2Emulsi',moist:'cst2Moist',sludge:'cst2Sludge'},
     'temperatur':{cst1:'tempCst1','cst 1':'tempCst1',cst2:'tempCst2','cst 2':'tempCst2','juice tank':'tempJuice',cot:'tempCot'}
   };
-  text.split(/\r?\n/).forEach(rawLine=>{
+  normalizedText.split(/\r?\n/).forEach(rawLine=>{
     const line = rawLine.replace(/[*_]/g,'').trim();
     if(!line) return;
     const siloMatch = line.match(/^kernel\s*silo\s*(\d*)$/i);
@@ -2365,7 +2366,7 @@ function buildDailyAverageReport(type){
   if(!targetDate||entries.length===0){
     wrap.style.display='none';
     output.textContent='';
-    showToast('Tidak ada sampling pada rentang 08:00 hari sebelumnya hingga 04:00 tanggal laporan.');
+    showToast('Belum ada sampling untuk tanggal laporan yang dipilih.');
     return;
   }
   const value=(key,decimals=2)=>dailyAverageText(dailyAverageValue(entries,key),decimals);
@@ -2429,7 +2430,7 @@ function buildDailyAverageReport(type){
   ].join('\n');
   output.textContent=report;
   wrap.style.display='block';
-  document.getElementById('dailyAverageReportMeta').textContent=`${title}: ${entries.length} sampling dalam rentang 08:00 ${recapDateLabel(dailyAverageDateOffset(targetDate,-1))} – 04:00 ${recapDateLabel(targetDate)}. Tiap parameter dibagi hanya dengan jumlah sampling yang mengisi nilainya; isian kosong tidak dianggap nol. OST dan Moisture Bottom OST ditampilkan "-" karena belum tersedia di laporan 2 jam.`;
+  document.getElementById('dailyAverageReportMeta').textContent=`${title}: ${entries.length} sampling. Tiap parameter dibagi hanya dengan jumlah sampling yang mengisi nilainya; isian kosong tidak dianggap nol. OST dan Moisture Bottom OST ditampilkan "-" karena belum tersedia di laporan 2 jam.`;
 }
 
 function copyDailyAverageReport(){
