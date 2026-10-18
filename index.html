@@ -2272,7 +2272,7 @@ function saveSmartReport(){
       time:now.toLocaleString('id-ID'),savedAt:now.toISOString(),source:'smart-report',reportText:reports[index],
       ltds1:parsed.metrics.ltds1,ltds2:parsed.metrics.ltds2,fc1:parsed.metrics.fc1,fc2:parsed.metrics.fc2,
       claybath:parsed.metrics.claybath,intiDirt:parsed.metrics.intiDirt,
-      kernelMoist:avg(silos.map(silo=>silo.moist)),kernelDirt:maxFinite(dirtSilos.map(silo=>silo.dirt)),
+      kernelMoist:kernelShipmentMoist(silos),kernelDirt:maxFinite(dirtSilos.map(silo=>silo.dirt)),
       kernelNu:avg(dirtSilos.map(silo=>silo.nu)),kernelNp:avg(dirtSilos.map(silo=>silo.np)),kernelShell:avg(dirtSilos.map(silo=>silo.c)),
       kernelBroken:avg(silos.map(silo=>silo.bk)),
       rippleEfficiency:parsed.metrics.rippleEfficiency,rippleBroken:parsed.metrics.rippleBroken,
@@ -2301,6 +2301,22 @@ function saveSmartReport(){
 
 function dailyAverageValue(entries, key){
   return avg(entries.map(entry=>entry[key]).filter(Number.isFinite));
+}
+
+function kernelShipmentMoist(silos){
+  return avg(silos
+    .filter(silo=>Number.isFinite(silo.dirt))
+    .map(silo=>silo.moist)
+    .filter(Number.isFinite));
+}
+
+function dailyAverageKernelMoist(entries){
+  return avg(entries.map(entry=>{
+    const silos=entry.session?.kernelSilo;
+    return Array.isArray(silos)&&silos.length
+      ? kernelShipmentMoist(silos)
+      : entry.kernelMoist;
+  }).filter(Number.isFinite));
 }
 
 function dailyAverageFromEntries(entries, keys){
@@ -2369,7 +2385,7 @@ function buildDailyAverageReport(type){
     showToast('Belum ada sampling untuk tanggal laporan yang dipilih.');
     return;
   }
-  const value=(key,decimals=2)=>dailyAverageText(dailyAverageValue(entries,key),decimals);
+  const value=(key,decimals=2)=>dailyAverageText(key==='kernelMoist'?dailyAverageKernelMoist(entries):dailyAverageValue(entries,key),decimals);
   const fcAverage=dailyAverageFromEntries(entries,['fc1','fc2']);
   const kernelBroken=avg(entries.map(entry=>{
     if(Number.isFinite(entry.kernelBroken)) return entry.kernelBroken;
@@ -2424,7 +2440,6 @@ function buildDailyAverageReport(type){
     '',
     '*Berikut Hasil Kualitas Produksi*',
     `*${dailyAverageDateLabel(targetDate)}*`,
-    `*Rata-Rata ${title}*`,
     '',
     sections.join('\n\n')
   ].join('\n');
@@ -2843,7 +2858,7 @@ function saveSessionToRecap(){
     fc2: s.fcyclone.line2,
     claybath: s.claybath ? s.claybath.totalLosses : null,
     intiDirt: s.intiBasah ? s.intiBasah.totalDirt : null,
-    kernelMoist: avg(silos.map(k => k.moist)),
+    kernelMoist: kernelShipmentMoist(silos),
     kernelDirt: maxFinite(dirtSilos.map(k => k.dirt)),
     kernelNu: avg(dirtSilos.map(k => k.nu)),
     kernelNp: avg(dirtSilos.map(k => k.np)),
