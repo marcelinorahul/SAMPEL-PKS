@@ -1,4 +1,4 @@
-const CACHE_NAME = 'silabor-pks-shell-v1';
+const CACHE_NAME = 'silabor-pks-shell-v2';
 const APP_SHELL = new URL('./apksample.html', self.registration.scope).href;
 
 self.addEventListener('install', event => {
